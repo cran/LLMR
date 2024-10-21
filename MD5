@@ -1,0 +1,8 @@
+d0fd1210b1fb6d3cf84a61eb145ffb55 *DESCRIPTION
+baf4a374dce18ba4c087f1453a4abc02 *LICENSE
+2feda63cfbb5f7054d409834bc837525 *NAMESPACE
+d064fd7123acd9a85a866fd14bc0c016 *R/LLMR.R
+a5721cd81e8b01e4af80033dd496ae0d *man/call_llm.Rd
+b1bdc264a5f76da7f991ec01c49b7f35 *man/llm_config.Rd
+932b7131caf04bf526c5460ca3488df1 *tests/testthat.R
+45e5f27e2fdf6bc813d0983a4b9d572b *tests/testthat/test-call_llm.R
