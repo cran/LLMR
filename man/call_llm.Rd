@@ -9,82 +9,45 @@ call_llm(config, messages, verbose = FALSE, json = FALSE)
 \arguments{
 \item{config}{An `llm_config` object created by `llm_config()`.}
 
-\item{messages}{A list of message objects to send to the API.}
+\item{messages}{A list of message objects (or a character vector for embeddings) to send to the API.}
 
 \item{verbose}{Logical. If `TRUE`, prints the full API response.}
 
 \item{json}{Logical. If `TRUE`, returns the raw JSON response as an attribute.}
 }
 \value{
-The generated text response with additional attributes based on parameters.
+The generated text response or embedding results with additional attributes.
 }
 \description{
 Sends a message to the specified LLM API and retrieves the response.
 }
 \examples{
 \dontrun{
-  # ----- Groq Example -----
-  groq_config <- llm_config(
-    provider = "groq",
-    model = "llama-3.1-8b-instant",
-    api_key = Sys.getenv("GROQ_KEY"),
-    temperature = 0.7,
-    max_tokens = 500
-  )
-
-  # Define the message with a system prompt
-  message <- list(
-    list(role = "system", content = "You ONLY fill in the blank. Do NOT answer in full sentences."),
-    list(role = "user", content = "What's the capital of France? ----")
-  )
-
-  # Call the LLM
-  response <- call_llm(groq_config, message)
-
-  # Display the response
-  cat("Groq Response:", response, "\n")
-
-  # Extract and print the full API response
-  full.response <- attr(response, which = 'full_response')
-  print(full.response)
-
-
-  # -----  OpenAI Example with More Parameters -----
-  # Create a configuration with more parameters
-  comprehensive_openai_config <- llm_config(
+  # OpenAI Embedding Example (overwriting api_url):
+  openai_embed_config <- llm_config(
     provider = "openai",
-    model = "gpt-4o-mini",
+    model = "text-embedding-3-small",
     api_key = Sys.getenv("OPENAI_KEY"),
-    temperature = 1,          # Controls the randomness of the output
-    max_tokens = 750,            # Maximum number of tokens to generate
-    top_p = 1,                 # Nucleus sampling parameter
-    frequency_penalty = 0.5,     # Penalizes new tokens based on their frequency
-    presence_penalty = 0.3        # Penalizes new tokens based on their presence
+    temperature = 0.3,
+    api_url = "https://api.openai.com/v1/embeddings"
   )
 
-  # Define a more complex message
-  comprehensive_message <- list(
-    list(role = "system", content = "You are an expert data scientist."),
-    list(role = "user", content = "When will you ever use OLS?")
+  text_input <- c("Political science is a useful subject",
+                  "We love sociology",
+                  "German elections are different",
+                  "A student was always curious.")
+
+  embed_response <- call_llm(openai_embed_config, text_input)
+
+  # Voyage AI Example:
+  voyage_config <- llm_config(
+    provider = "voyage",
+    model = "voyage-large-2",
+    api_key = Sys.getenv("VOYAGE_API_KEY")
   )
 
-  # Call the LLM with all parameters
-  comprehensive_response <- call_llm(
-    config = comprehensive_openai_config,
-    messages = comprehensive_message,
-    json = TRUE        # Retrieve the raw JSON response as an attribute
-  )
-
-  # Display the generated text response
-  cat("Comprehensive OpenAI Response:", comprehensive_response, "\n")
-
-  # Access and print the raw JSON response
-  raw_json_response <- attr(comprehensive_response, "raw_json")
-  print(raw_json_response)
+  embedding_response <- call_llm(voyage_config, text_input)
+  embeddings <- parse_embeddings(embedding_response)
+  embeddings |> cor() |> print()
 }
-
-
-}
-\seealso{
-\code{\link{llm_config}}
 }

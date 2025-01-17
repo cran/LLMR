@@ -1,4 +1,3 @@
-
 # ----- Helper Functions -----
 
 #' Perform API Request
@@ -8,14 +7,11 @@
 #' @keywords internal
 #' @noRd
 #' @importFrom httr2 req_perform resp_body_raw resp_body_json
-#' @importFrom rlang `%||%`
 perform_request <- function(req, verbose, json) {
   resp <- httr2::req_perform(req)
-
   # Get the raw response as text
   raw_response <- httr2::resp_body_raw(resp)
   raw_json <- rawToChar(raw_response)
-
   # Parse the response as JSON
   content <- httr2::resp_body_json(resp)
 
@@ -32,7 +28,7 @@ perform_request <- function(req, verbose, json) {
     return(text)
   }
 
-  # Extract the text response
+  # Extract the text response (or embeddings for embedding calls)
   text <- extract_text(content)
   attr(text, "full_response") <- content
   return(text)
@@ -45,6 +41,11 @@ perform_request <- function(req, verbose, json) {
 #' @keywords internal
 #' @noRd
 extract_text <- function(content) {
+  # If the content contains embedding results, return it as is.
+  if (!is.null(content$data) && is.list(content$data)) {
+    return(content)
+  }
+
   if (is.null(content$choices) && is.null(content$content)) {
     stop("No recognizable content returned from API.")
   }
@@ -103,6 +104,7 @@ format_anthropic_messages <- function(messages) {
 }
 
 # ----- Exported Functions -----
+
 #' Create LLM Configuration
 #'
 #' Creates a configuration object for interacting with a specified LLM API provider.
@@ -111,67 +113,56 @@ format_anthropic_messages <- function(messages) {
 #'   "openai" for OpenAI,
 #'   "anthropic" for Anthropic,
 #'   "groq" for Groq,
-#'   "together" for Together AI;
-#'   This configuration is extendable; to add support for additional providers, define a new S3 method for `call_llm` corresponding to the provider.
-#' @param model The model name to use. This depends on the provider. For example:
-#'   OpenAI: "gpt-4o-mini",
-#'   Anthropic: "claude-3-opus-20240229",
-#'   Groq: "llama-3.1-8b-instant",
-#'   Together AI: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".
+#'   "together" for Together AI,
+#'   "deepseek" for DeepSeek,
+#'   "voyage" for Voyage AI.
+#' @param model The model name to use. This depends on the provider.
 #' @param api_key Your API key for the provider.
-#' @param ... Additional model-specific parameters (e.g., `temperature`, `max_tokens`).
+#' @param ... Additional model-specific parameters (e.g., `temperature`, `max_tokens`, etc.).
 #'
 #' @return An object of class `llm_config` containing API and model parameters.
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#'   # Obtain API keys from:
-#'   # OpenAI: https://platform.openai.com/api-keys
-#'   # Groq: https://console.groq.com/keys
-#'   # Anthropic: https://console.anthropic.com/settings/keys
-#'   # Together AI: https://api.together.ai/settings/api-keys
-#'
-#'   # ----- OpenAI Example -----
+#'   # OpenAI Example (chat)
 #'   openai_config <- llm_config(
 #'     provider = "openai",
 #'     model = "gpt-4o-mini",
-#'     api_key = OPENAI_KEY,
+#'     api_key = Sys.getenv("OPENAI_KEY"),
 #'     temperature = 0.7,
 #'     max_tokens = 500
 #'   )
 #'
-#'   # ----- Anthropic Example -----
-#'   anthropic_config <- llm_config(
-#'     provider = "anthropic",
-#'     model = "claude-3-opus-20240229",
-#'     api_key = ANTHROPIC_API_KEY,
-#'     max_tokens = 500
-#'   )
-#'
-#'   # ----- Groq Example -----
-#'   groq_config <- llm_config(
-#'     provider = "groq",
-#'     model = "llama-3.1-8b-instant",
-#'     api_key = GROQ_API_KEY,
+#'   # OpenAI Embedding Example (overwriting api_url):
+#'   openai_embed_config <- llm_config(
+#'     provider = "openai",
+#'     model = "text-embedding-3-small",
+#'     api_key = Sys.getenv("OPENAI_KEY"),
 #'     temperature = 0.3,
-#'     max_tokens = 1000
+#'     api_url = "https://api.openai.com/v1/embeddings"
 #'   )
 #'
-#'   # ----- Together AI Example -----
-#'   together_config <- llm_config(
-#'     provider = "together",
-#'     model = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-#'     api_key = TOGETHER_KEY,
-#'     temperature = 0.5,
-#'     max_tokens = 1000
+#'   text_input <- c("Political science is a useful subject",
+#'                   "We love sociology",
+#'                   "German elections are different",
+#'                   "A student was always curious.")
+#'
+#'   embed_response <- call_llm(openai_embed_config, text_input)
+#'   # parse_embeddings() can then be used to convert the embedding results.
+#'
+#'   # Voyage AI Example:
+#'   voyage_config <- llm_config(
+#'     provider = "voyage",
+#'     model = "voyage-large-2",
+#'     api_key = Sys.getenv("VOYAGE_API_KEY")
 #'   )
 #'
-#'   # This configuration is extendable by defining new `call_llm` methods for additional providers.
+#'   embedding_response <- call_llm(voyage_config, text_input)
+#'   embeddings <- parse_embeddings(embedding_response)
+#'   # Additional processing:
+#'   embeddings |> cor() |> print()
 #' }
-#'
-#' @seealso \code{\link{call_llm}}
-
 llm_config <- function(provider, model, api_key, ...) {
   model_params <- list(...)
   config <- list(
@@ -184,94 +175,65 @@ llm_config <- function(provider, model, api_key, ...) {
   return(config)
 }
 
-
 #' Call LLM API
 #'
 #' Sends a message to the specified LLM API and retrieves the response.
 #'
 #' @param config An `llm_config` object created by `llm_config()`.
-#' @param messages A list of message objects to send to the API.
+#' @param messages A list of message objects (or a character vector for embeddings) to send to the API.
 #' @param verbose Logical. If `TRUE`, prints the full API response.
 #' @param json Logical. If `TRUE`, returns the raw JSON response as an attribute.
 #'
-#' @return The generated text response with additional attributes based on parameters.
+#' @return The generated text response or embedding results with additional attributes.
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#'   # ----- Groq Example -----
-#'   groq_config <- llm_config(
-#'     provider = "groq",
-#'     model = "llama-3.1-8b-instant",
-#'     api_key = Sys.getenv("GROQ_KEY"),
-#'     temperature = 0.7,
-#'     max_tokens = 500
-#'   )
-#'
-#'   # Define the message with a system prompt
-#'   message <- list(
-#'     list(role = "system", content = "You ONLY fill in the blank. Do NOT answer in full sentences."),
-#'     list(role = "user", content = "What's the capital of France? ----")
-#'   )
-#'
-#'   # Call the LLM
-#'   response <- call_llm(groq_config, message)
-#'
-#'   # Display the response
-#'   cat("Groq Response:", response, "\n")
-#'
-#'   # Extract and print the full API response
-#'   full.response <- attr(response, which = 'full_response')
-#'   print(full.response)
-#'
-#'
-#'   # -----  OpenAI Example with More Parameters -----
-#'   # Create a configuration with more parameters
-#'   comprehensive_openai_config <- llm_config(
+#'   # OpenAI Embedding Example (overwriting api_url):
+#'   openai_embed_config <- llm_config(
 #'     provider = "openai",
-#'     model = "gpt-4o-mini",
+#'     model = "text-embedding-3-small",
 #'     api_key = Sys.getenv("OPENAI_KEY"),
-#'     temperature = 1,          # Controls the randomness of the output
-#'     max_tokens = 750,            # Maximum number of tokens to generate
-#'     top_p = 1,                 # Nucleus sampling parameter
-#'     frequency_penalty = 0.5,     # Penalizes new tokens based on their frequency
-#'     presence_penalty = 0.3        # Penalizes new tokens based on their presence
+#'     temperature = 0.3,
+#'     api_url = "https://api.openai.com/v1/embeddings"
 #'   )
 #'
-#'   # Define a more complex message
-#'   comprehensive_message <- list(
-#'     list(role = "system", content = "You are an expert data scientist."),
-#'     list(role = "user", content = "When will you ever use OLS?")
+#'   text_input <- c("Political science is a useful subject",
+#'                   "We love sociology",
+#'                   "German elections are different",
+#'                   "A student was always curious.")
+#'
+#'   embed_response <- call_llm(openai_embed_config, text_input)
+#'
+#'   # Voyage AI Example:
+#'   voyage_config <- llm_config(
+#'     provider = "voyage",
+#'     model = "voyage-large-2",
+#'     api_key = Sys.getenv("VOYAGE_API_KEY")
 #'   )
 #'
-#'   # Call the LLM with all parameters
-#'   comprehensive_response <- call_llm(
-#'     config = comprehensive_openai_config,
-#'     messages = comprehensive_message,
-#'     json = TRUE        # Retrieve the raw JSON response as an attribute
-#'   )
-#'
-#'   # Display the generated text response
-#'   cat("Comprehensive OpenAI Response:", comprehensive_response, "\n")
-#'
-#'   # Access and print the raw JSON response
-#'   raw_json_response <- attr(comprehensive_response, "raw_json")
-#'   print(raw_json_response)
+#'   embedding_response <- call_llm(voyage_config, text_input)
+#'   embeddings <- parse_embeddings(embedding_response)
+#'   embeddings |> cor() |> print()
 #' }
-#'
-#'
-#' @seealso \code{\link{llm_config}}
 call_llm <- function(config, messages, verbose = FALSE, json = FALSE) {
   UseMethod("call_llm", config)
 }
 
-#' @export
-call_llm.default <- function(config, messages, verbose = FALSE, json = FALSE) {
-  stop(paste("Unsupported API provider:", config$provider))
+# Helper to determine the endpoint
+get_endpoint <- function(config, default_endpoint) {
+  if (!is.null(config$model_params$api_url)) {
+    return(config$model_params$api_url)
+  }
+  default_endpoint
 }
 
 #' @export
-call_llm.openai <- function(config, messages, verbose = FALSE, json = FALSE) {
+call_llm.default <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.openai.com/v1/chat/completions")
+  message("Provider-specific function not present, defaulting to OpenAI format.")
+
+  # Build the request body as in call_llm.openai
   body <- list(
     model = config$model,
     messages = messages,
@@ -282,7 +244,31 @@ call_llm.openai <- function(config, messages, verbose = FALSE, json = FALSE) {
     presence_penalty = rlang::`%||%`(config$model_params$presence_penalty, 0)
   )
 
-  req <- httr2::request("https://api.openai.com/v1/chat/completions") |>
+  req <- httr2::request(endpoint) |>
+    httr2::req_headers(
+      "Content-Type" = "application/json",
+      "Authorization" = paste("Bearer", config$api_key)
+    ) |>
+    httr2::req_body_json(body)
+
+  perform_request(req, verbose, json)
+}
+
+#' @export
+call_llm.openai <- function(config, messages, verbose = FALSE, json = FALSE) {
+  # Use overwrite if provided, otherwise default to chat completions endpoint.
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.openai.com/v1/chat/completions")
+  body <- list(
+    model = config$model,
+    messages = messages,
+    temperature = rlang::`%||%`(config$model_params$temperature, 1),
+    max_tokens = rlang::`%||%`(config$model_params$max_tokens, 1024),
+    top_p = rlang::`%||%`(config$model_params$top_p, 1),
+    frequency_penalty = rlang::`%||%`(config$model_params$frequency_penalty, 0),
+    presence_penalty = rlang::`%||%`(config$model_params$presence_penalty, 0)
+  )
+
+  req <- httr2::request(endpoint) |>
     httr2::req_headers(
       "Content-Type" = "application/json",
       "Authorization" = paste("Bearer", config$api_key)
@@ -294,6 +280,7 @@ call_llm.openai <- function(config, messages, verbose = FALSE, json = FALSE) {
 
 #' @export
 call_llm.anthropic <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.anthropic.com/v1/messages")
   formatted <- format_anthropic_messages(messages)
 
   body <- list(
@@ -310,7 +297,7 @@ call_llm.anthropic <- function(config, messages, verbose = FALSE, json = FALSE) 
     body$messages <- formatted$formatted_messages
   }
 
-  req <- httr2::request("https://api.anthropic.com/v1/messages") |>
+  req <- httr2::request(endpoint) |>
     httr2::req_headers(
       "Content-Type" = "application/json",
       "x-api-key" = config$api_key,
@@ -323,6 +310,7 @@ call_llm.anthropic <- function(config, messages, verbose = FALSE, json = FALSE) 
 
 #' @export
 call_llm.groq <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.groq.com/openai/v1/chat/completions")
   body <- list(
     model = config$model,
     messages = messages,
@@ -330,7 +318,7 @@ call_llm.groq <- function(config, messages, verbose = FALSE, json = FALSE) {
     max_tokens = rlang::`%||%`(config$model_params$max_tokens, 1024)
   )
 
-  req <- httr2::request("https://api.groq.com/openai/v1/chat/completions") |>
+  req <- httr2::request(endpoint) |>
     httr2::req_headers(
       "Content-Type" = "application/json",
       "Authorization" = paste("Bearer", config$api_key)
@@ -342,6 +330,7 @@ call_llm.groq <- function(config, messages, verbose = FALSE, json = FALSE) {
 
 #' @export
 call_llm.together <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.together.xyz/v1/chat/completions")
   body <- list(
     model = config$model,
     messages = messages,
@@ -354,7 +343,7 @@ call_llm.together <- function(config, messages, verbose = FALSE, json = FALSE) {
     stream = rlang::`%||%`(config$model_params$stream, FALSE)
   )
 
-  req <- httr2::request("https://api.together.xyz/v1/chat/completions") |>
+  req <- httr2::request(endpoint) |>
     httr2::req_headers(
       "Content-Type" = "application/json",
       "Authorization" = paste("Bearer", config$api_key)
@@ -362,4 +351,82 @@ call_llm.together <- function(config, messages, verbose = FALSE, json = FALSE) {
     httr2::req_body_json(body)
 
   perform_request(req, verbose, json)
+}
+
+#' @export
+call_llm.deepseek <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.deepseek.com/chat/completions")
+  body <- list(
+    model = rlang::`%||%`(config$model, "deepseek-chat"),
+    messages = messages,
+    temperature = rlang::`%||%`(config$model_params$temperature, 1),
+    max_tokens = rlang::`%||%`(config$model_params$max_tokens, 1024),
+    top_p = rlang::`%||%`(config$model_params$top_p, 1),
+    frequency_penalty = rlang::`%||%`(config$model_params$frequency_penalty, 0),
+    presence_penalty = rlang::`%||%`(config$model_params$presence_penalty, 0)
+  )
+
+  req <- httr2::request(endpoint) |>
+    httr2::req_headers(
+      "Content-Type" = "application/json",
+      "Authorization" = paste("Bearer", config$api_key)
+    ) |>
+    httr2::req_body_json(body)
+
+  perform_request(req, verbose, json)
+}
+
+#' @export
+call_llm.voyage <- function(config, messages, verbose = FALSE, json = FALSE) {
+  endpoint <- get_endpoint(config, default_endpoint = "https://api.voyageai.com/v1/embeddings")
+  body <- list(
+    input = messages,
+    model = config$model
+  )
+
+  req <- httr2::request(endpoint) |>
+    httr2::req_headers(
+      "Content-Type" = "application/json",
+      "Authorization" = paste("Bearer", config$api_key)
+    ) |>
+    httr2::req_body_json(body)
+
+  perform_request(req, verbose, json)
+}
+
+#' Parse Embedding Response into a Numeric Matrix
+#'
+#' Converts the embedding response data to a numeric matrix.
+#'
+#' @param embedding_response The response returned from an embedding API call.
+#'
+#' @return A numeric matrix of embeddings with column names as sequence numbers.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#'   text_input <- c("Political science is a useful subject",
+#'                   "We love sociology",
+#'                   "German elections are different",
+#'                   "A student was always curious.")
+#'
+#'   # Configure the embedding API provider (example with Voyage API)
+#'   voyage_config <- llm_config(
+#'     provider = "voyage",
+#'     model = "voyage-large-2",
+#'     api_key = Sys.getenv("VOYAGE_API_KEY")
+#'   )
+#'
+#'   embedding_response <- call_llm(voyage_config, text_input)
+#'   embeddings <- parse_embeddings(embedding_response)
+#'   # Additional processing:
+#'   embeddings |> cor() |> print()
+#' }
+parse_embeddings <- function(embedding_response) {
+  embeddings <- embedding_response$data |>
+    purrr::map(~ as.numeric(.x$embedding)) |>
+    as.data.frame() |>
+    as.matrix()
+  colnames(embeddings) <- seq_len(ncol(embeddings))
+  embeddings
 }

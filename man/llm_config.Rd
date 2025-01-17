@@ -11,18 +11,15 @@ llm_config(provider, model, api_key, ...)
 "openai" for OpenAI,
 "anthropic" for Anthropic,
 "groq" for Groq,
-"together" for Together AI;
-This configuration is extendable; to add support for additional providers, define a new S3 method for `call_llm` corresponding to the provider.}
+"together" for Together AI,
+"deepseek" for DeepSeek,
+"voyage" for Voyage AI.}
 
-\item{model}{The model name to use. This depends on the provider. For example:
-OpenAI: "gpt-4o-mini",
-Anthropic: "claude-3-opus-20240229",
-Groq: "llama-3.1-8b-instant",
-Together AI: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".}
+\item{model}{The model name to use. This depends on the provider.}
 
 \item{api_key}{Your API key for the provider.}
 
-\item{...}{Additional model-specific parameters (e.g., `temperature`, `max_tokens`).}
+\item{...}{Additional model-specific parameters (e.g., `temperature`, `max_tokens`, etc.).}
 }
 \value{
 An object of class `llm_config` containing API and model parameters.
@@ -32,51 +29,42 @@ Creates a configuration object for interacting with a specified LLM API provider
 }
 \examples{
 \dontrun{
-  # Obtain API keys from:
-  # OpenAI: https://platform.openai.com/api-keys
-  # Groq: https://console.groq.com/keys
-  # Anthropic: https://console.anthropic.com/settings/keys
-  # Together AI: https://api.together.ai/settings/api-keys
-
-  # ----- OpenAI Example -----
+  # OpenAI Example (chat)
   openai_config <- llm_config(
     provider = "openai",
     model = "gpt-4o-mini",
-    api_key = OPENAI_KEY,
+    api_key = Sys.getenv("OPENAI_KEY"),
     temperature = 0.7,
     max_tokens = 500
   )
 
-  # ----- Anthropic Example -----
-  anthropic_config <- llm_config(
-    provider = "anthropic",
-    model = "claude-3-opus-20240229",
-    api_key = ANTHROPIC_API_KEY,
-    max_tokens = 500
-  )
-
-  # ----- Groq Example -----
-  groq_config <- llm_config(
-    provider = "groq",
-    model = "llama-3.1-8b-instant",
-    api_key = GROQ_API_KEY,
+  # OpenAI Embedding Example (overwriting api_url):
+  openai_embed_config <- llm_config(
+    provider = "openai",
+    model = "text-embedding-3-small",
+    api_key = Sys.getenv("OPENAI_KEY"),
     temperature = 0.3,
-    max_tokens = 1000
+    api_url = "https://api.openai.com/v1/embeddings"
   )
 
-  # ----- Together AI Example -----
-  together_config <- llm_config(
-    provider = "together",
-    model = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-    api_key = TOGETHER_KEY,
-    temperature = 0.5,
-    max_tokens = 1000
+  text_input <- c("Political science is a useful subject",
+                  "We love sociology",
+                  "German elections are different",
+                  "A student was always curious.")
+
+  embed_response <- call_llm(openai_embed_config, text_input)
+  # parse_embeddings() can then be used to convert the embedding results.
+
+  # Voyage AI Example:
+  voyage_config <- llm_config(
+    provider = "voyage",
+    model = "voyage-large-2",
+    api_key = Sys.getenv("VOYAGE_API_KEY")
   )
 
-  # This configuration is extendable by defining new `call_llm` methods for additional providers.
+  embedding_response <- call_llm(voyage_config, text_input)
+  embeddings <- parse_embeddings(embedding_response)
+  # Additional processing:
+  embeddings |> cor() |> print()
 }
-
-}
-\seealso{
-\code{\link{call_llm}}
 }
