@@ -5,17 +5,19 @@
 \title{LLMConversation Class for Coordinating Agents}
 \description{
 An R6 class for managing a conversation among multiple \code{Agent} objects.
-Holds:
-\itemize{
-  \item \code{agents}: Named list of Agents, keyed by \code{agent$id}.
-  \item \code{conversation_history}: The full log of messages so far.
-  \item \code{topic}: A short label or theme for the conversation.
-  \item \code{prompts}: Optional named list of prompt templates.
-}
+Includes optional conversation-level summarization if `summarizer_config` is provided:
 
-Agents do \emph{not} automatically share memory. Whenever you call \code{converse()},
-the entire conversation history is \emph{temporarily} loaded into the targeted
-agent, which responds, then is pruned again.
+\enumerate{
+  \item \strong{summarizer_config:} A list that can contain:
+      \itemize{
+        \item \code{llm_config}: The \code{llm_config} used for the summarizer call (default a basic OpenAI).
+        \item \code{prompt}: A custom summarizer prompt (default provided).
+        \item \code{threshold}: Word-count threshold (default 3000 words).
+        \item \code{summary_length}: Target length in words for the summary (default 400).
+      }
+  \item Once the total conversation word count exceeds `threshold`, a summarization is triggered.
+  \item The conversation is replaced with a single condensed message that keeps track of who said what.
+}
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
@@ -24,9 +26,21 @@ agent, which responds, then is pruned again.
 
 \item{\code{conversation_history}}{A list of speaker/text pairs for the entire conversation.}
 
+\item{\code{conversation_history_full}}{A list of speaker/text pairs for the entire conversation that is never modified and never used directly.}
+
 \item{\code{topic}}{A short string describing the conversation's theme.}
 
 \item{\code{prompts}}{An optional list of prompt templates (may be ignored).}
+
+\item{\code{shared_memory}}{Global store that is also fed into each agent's memory.}
+
+\item{\code{last_response}}{last response received}
+
+\item{\code{total_tokens_sent}}{total tokens sent in conversation}
+
+\item{\code{total_tokens_received}}{total tokens received in conversation}
+
+\item{\code{summarizer_config}}{Config list controlling optional conversation-level summarization.}
 }
 \if{html}{\out{</div>}}
 }
@@ -41,6 +55,8 @@ agent, which responds, then is pruned again.
 \item \href{#method-LLMConversation-print_history}{\code{LLMConversation$print_history()}}
 \item \href{#method-LLMConversation-reset_conversation}{\code{LLMConversation$reset_conversation()}}
 \item \href{#method-LLMConversation-|>}{\code{LLMConversation$|>()}}
+\item \href{#method-LLMConversation-maybe_summarize_conversation}{\code{LLMConversation$maybe_summarize_conversation()}}
+\item \href{#method-LLMConversation-summarize_conversation}{\code{LLMConversation$summarize_conversation()}}
 \item \href{#method-LLMConversation-clone}{\code{LLMConversation$clone()}}
 }
 }
@@ -50,7 +66,7 @@ agent, which responds, then is pruned again.
 \subsection{Method \code{new()}}{
 Create a new conversation.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{LLMConversation$new(topic, prompts = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{LLMConversation$new(topic, prompts = NULL, summarizer_config = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -59,6 +75,8 @@ Create a new conversation.
 \item{\code{topic}}{Character. The conversation topic.}
 
 \item{\code{prompts}}{Optional named list of prompt templates.}
+
+\item{\code{summarizer_config}}{Optional list controlling conversation-level summarization.}
 }
 \if{html}{\out{</div>}}
 }
@@ -67,7 +85,7 @@ Create a new conversation.
 \if{html}{\out{<a id="method-LLMConversation-add_agent"></a>}}
 \if{latex}{\out{\hypertarget{method-LLMConversation-add_agent}{}}}
 \subsection{Method \code{add_agent()}}{
-Add an \code{Agent} to this conversation. The agent is stored by its \code{id}.
+Add an \code{Agent} to this conversation. The agent is stored by \code{agent$id}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LLMConversation$add_agent(agent)}\if{html}{\out{</div>}}
 }
@@ -75,7 +93,7 @@ Add an \code{Agent} to this conversation. The agent is stored by its \code{id}.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{agent}}{The \code{Agent} to add.}
+\item{\code{agent}}{An Agent object.}
 }
 \if{html}{\out{</div>}}
 }
@@ -84,7 +102,8 @@ Add an \code{Agent} to this conversation. The agent is stored by its \code{id}.
 \if{html}{\out{<a id="method-LLMConversation-add_message"></a>}}
 \if{latex}{\out{\hypertarget{method-LLMConversation-add_message}{}}}
 \subsection{Method \code{add_message()}}{
-Add a message to the global conversation log.
+Add a message to the global conversation log. Also appended to shared memory.
+Then possibly trigger summarization if configured.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LLMConversation$add_message(speaker, text)}\if{html}{\out{</div>}}
 }
@@ -103,9 +122,9 @@ Add a message to the global conversation log.
 \if{html}{\out{<a id="method-LLMConversation-converse"></a>}}
 \if{latex}{\out{\hypertarget{method-LLMConversation-converse}{}}}
 \subsection{Method \code{converse()}}{
-Have a specific agent produce a response. The entire global conversation so far
-is temporarily loaded into that agent's memory, the agent responds, and then
-we store the agent's new message in this conversation.
+Have a specific agent produce a response. The entire global conversation plus
+shared memory is temporarily loaded into that agent. Then the new message is
+recorded in the conversation. The agent's memory is then reset except for its new line.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LLMConversation$converse(
   agent_id,
@@ -146,11 +165,11 @@ Run a multi-step conversation among a sequence of agents.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{agent_sequence}}{Character vector of agent IDs in the order they will speak.}
+\item{\code{agent_sequence}}{Character vector of agent IDs in the order they speak.}
 
-\item{\code{prompt_template}}{Either a single string or a named list of templates.}
+\item{\code{prompt_template}}{Single string or named list of strings keyed by agent ID.}
 
-\item{\code{replacements}}{Either a single list or a list-of-lists with per-agent placeholders.}
+\item{\code{replacements}}{Single list or list-of-lists with per-agent placeholders.}
 
 \item{\code{verbose}}{Logical. If TRUE, prints extra info.}
 }
@@ -171,7 +190,7 @@ Print the conversation so far to the console.
 \if{html}{\out{<a id="method-LLMConversation-reset_conversation"></a>}}
 \if{latex}{\out{\hypertarget{method-LLMConversation-reset_conversation}{}}}
 \subsection{Method \code{reset_conversation()}}{
-Clear the global conversation and reset all agent memories.
+Clear the global conversation and reset all agents' memories.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LLMConversation$reset_conversation()}\if{html}{\out{</div>}}
 }
@@ -181,8 +200,7 @@ Clear the global conversation and reset all agent memories.
 \if{html}{\out{<a id="method-LLMConversation-|>"></a>}}
 \if{latex}{\out{\hypertarget{method-LLMConversation-|>}{}}}
 \subsection{Method \code{|>()}}{
-A pipe-like operator to chain conversation steps. E.g.,
-\code{conv |> "Solver"(prompt_template, replacements)}.
+Pipe-like operator to chain conversation steps. E.g., conv |> "Solver"(...)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{LLMConversation$|>(agent_id)}\if{html}{\out{</div>}}
 }
@@ -194,6 +212,31 @@ A pipe-like operator to chain conversation steps. E.g.,
 }
 \if{html}{\out{</div>}}
 }
+\subsection{Returns}{
+A function that expects (prompt_template, replacements, verbose).
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-LLMConversation-maybe_summarize_conversation"></a>}}
+\if{latex}{\out{\hypertarget{method-LLMConversation-maybe_summarize_conversation}{}}}
+\subsection{Method \code{maybe_summarize_conversation()}}{
+Possibly summarize the conversation if summarizer_config is non-null and
+the word count of conversation_history exceeds summarizer_config$threshold.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{LLMConversation$maybe_summarize_conversation()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-LLMConversation-summarize_conversation"></a>}}
+\if{latex}{\out{\hypertarget{method-LLMConversation-summarize_conversation}{}}}
+\subsection{Method \code{summarize_conversation()}}{
+Summarize the conversation so far into one condensed message.
+The new conversation history becomes a single message with speaker = "summary".
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{LLMConversation$summarize_conversation()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-LLMConversation-clone"></a>}}
