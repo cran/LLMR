@@ -1,24 +1,24 @@
 Package: LLMR
 Title: Interface for Large Language Model APIs in R
-Version: 0.3.0
+Version: 0.4.2
 Depends: R (>= 4.1.0)
 Authors@R: 
     person("Ali", "Sanaei", , "sanaei@uchicago.edu", role = c("aut", "cre"))
-Description: Provides a unified interface to interact with multiple Large Language Model (LLM) APIs. The package supports text generation, embeddings, and parallelization.  Users can switch between different LLM providers seamlessly within R workflows, or call multiple models in parallel. The package enables creation of LLM agents for automated tasks and provides consistent error handling across all supported APIs. APIs include 'OpenAI' (see <https://platform.openai.com/docs/overview> for details), 'Anthropic' (see <https://docs.anthropic.com/en/api/getting-started> for details), 'Groq' (see <https://console.groq.com/docs/api-reference> for details), 'Together AI' (see <https://docs.together.ai/docs/quickstart> for details), 'DeepSeek' (see <https://api-docs.deepseek.com> for details), 'Gemini' (see <https://aistudio.google.com> for details), and 'Voyage AI' (see <https://docs.voyageai.com/docs/introduction> for details). 
+Description: Provides a unified interface to interact with multiple Large Language Model (LLM) APIs. The package supports text generation, embeddings, parallelization, as well as tidyverse integration.  Users can switch between different LLM providers seamlessly within R workflows, or call multiple models in parallel. The package enables creation of LLM agents for automated tasks and provides consistent error handling across all supported APIs. APIs include 'OpenAI' (see <https://platform.openai.com/docs/overview> for details), 'Anthropic' (see <https://docs.anthropic.com/en/api/getting-started> for details), 'Groq' (see <https://console.groq.com/docs/api-reference> for details), 'Together AI' (see <https://docs.together.ai/docs/quickstart> for details), 'DeepSeek' (see <https://api-docs.deepseek.com> for details), 'Gemini' (see <https://aistudio.google.com> for details), and 'Voyage AI' (see <https://docs.voyageai.com/docs/introduction> for details). 
 License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: httr2, purrr, dplyr, rlang, memoise, future, future.apply,
-        tibble
+Imports: httr2, purrr, dplyr, tidyr, rlang, memoise, future,
+        future.apply, tibble, base64enc, mime, glue (>= 1.6.0)
 Suggests: testthat (>= 3.0.0), roxygen2 (>= 7.1.2), httptest2,
-        progressr, knitr, rmarkdown, ggplot2
+        progressr, knitr, rmarkdown, ggplot2, R.rsp (>= 1.19.0)
 RoxygenNote: 7.3.2
 Config/testthat/edition: 3
 URL: https://github.com/asanaei/LLMR
 BugReports: https://github.com/asanaei/LLMR/issues
-VignetteBuilder: knitr
+VignetteBuilder: R.rsp
 NeedsCompilation: no
-Packaged: 2025-05-27 16:57:24 UTC; ali
 Author: Ali Sanaei [aut, cre]
 Maintainer: Ali Sanaei <sanaei@uchicago.edu>
+Packaged: 2025-06-26 06:38:09 UTC; ali
 Repository: CRAN
-Date/Publication: 2025-05-27 23:10:15 UTC
+Date/Publication: 2025-06-26 07:40:07 UTC
