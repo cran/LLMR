@@ -6,26 +6,33 @@
 \usage{
 build_factorial_experiments(
   configs,
-  messages_list,
+  user_prompts,
+  system_prompts = NULL,
   repetitions = 1,
   config_labels = NULL,
-  message_labels = NULL
+  user_prompt_labels = NULL,
+  system_prompt_labels = NULL
 )
 }
 \arguments{
 \item{configs}{List of llm_config objects to test.}
 
-\item{messages_list}{List of message lists to test (each element is a message list for one condition).}
+\item{user_prompts}{Character vector (or list) of user‑turn prompts.}
+
+\item{system_prompts}{Optional character vector of system messages
+(recycled against user_prompts).}
 
 \item{repetitions}{Integer. Number of repetitions per combination. Default is 1.}
 
 \item{config_labels}{Character vector of labels for configs. If NULL, uses "provider_model".}
 
-\item{message_labels}{Character vector of labels for message sets. If NULL, uses "messages_1", etc.}
+\item{user_prompt_labels}{Optional labels for the user prompts.}
+
+\item{system_prompt_labels}{Optional labels for the system prompts.}
 }
 \value{
 A tibble with columns: config (list-column), messages (list-column),
-  config_label, message_label, and repetition. Ready for use with call_llm_par().
+config_label, message_label, and repetition. Ready for use with call_llm_par().
 }
 \description{
 Creates a tibble of experiments for factorial designs where you want to test
@@ -35,11 +42,11 @@ all combinations of configs, messages, and repetitions with automatic metadata.
 \dontrun{
   # Factorial design: 3 configs x 2 message conditions x 10 reps = 60 experiments
   configs <- list(gpt4_config, claude_config, llama_config)
-  messages_list <- list(control_messages, treatment_messages)
+  messages <- list("Control prompt", "Treatment prompt")
 
   experiments <- build_factorial_experiments(
     configs = configs,
-    messages_list = messages_list,
+    messages = messages,
     repetitions = 10,
     config_labels = c("gpt4", "claude", "llama"),
     message_labels = c("control", "treatment")

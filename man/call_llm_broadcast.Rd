@@ -2,40 +2,55 @@
 % Please edit documentation in R/LLM_parallel_utils.R
 \name{call_llm_broadcast}
 \alias{call_llm_broadcast}
-\title{Mode 2: Message Broadcast - Fixed Config, Multiple Messages}
+\title{Parallel API calls: Fixed Config, Multiple Messages}
 \usage{
-call_llm_broadcast(config, messages_list, ...)
+call_llm_broadcast(config, messages, ...)
 }
 \arguments{
 \item{config}{Single llm_config object to use for all calls.}
 
-\item{messages_list}{A list of message lists, each for one API call.}
+\item{messages}{A character vector (each element is a prompt) OR
+a list where each element is a pre-formatted message list.}
 
-\item{...}{Additional arguments passed to `call_llm_par` (e.g., tries, verbose, progress).}
+\item{...}{Additional arguments passed to \code{call_llm_par} (e.g., tries, verbose, progress).}
 }
 \value{
 A tibble with columns: message_index (metadata), provider, model,
-  all model parameters, response_text, raw_response_json, success, error_message.
+all model parameters, response_text, raw_response_json, success, error_message.
 }
 \description{
 Broadcasts different messages using the same configuration in parallel.
 Perfect for batch processing different prompts with consistent settings.
-This function requires setting up the parallel environment using `setup_llm_parallel`.
+This function requires setting up the parallel environment using \code{setup_llm_parallel}.
 }
+\section{Parallel Workflow}{
+
+All parallel functions require the \code{future} backend to be configured.
+The recommended workflow is:
+\enumerate{
+\item Call \code{setup_llm_parallel()} once at the start of your script.
+\item Run one or more parallel experiments (e.g., \code{call_llm_broadcast()}).
+\item Call \code{reset_llm_parallel()} at the end to restore sequential processing.
+}
+}
+
 \examples{
 \dontrun{
   # Broadcast different questions
-  config <- llm_config(provider = "openai", model = "gpt-4o-mini",
+  config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
                        api_key = Sys.getenv("OPENAI_API_KEY"))
 
-  messages_list <- list(
+  messages <- list(
     list(list(role = "user", content = "What is 2+2?")),
     list(list(role = "user", content = "What is 3*5?")),
     list(list(role = "user", content = "What is 10/2?"))
   )
 
   setup_llm_parallel(workers = 4, verbose = TRUE)
-  results <- call_llm_broadcast(config, messages_list)
+  results <- call_llm_broadcast(config, messages)
   reset_llm_parallel(verbose = TRUE)
 }
+}
+\seealso{
+\code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}
 }

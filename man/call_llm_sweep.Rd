@@ -2,7 +2,7 @@
 % Please edit documentation in R/LLM_parallel_utils.R
 \name{call_llm_sweep}
 \alias{call_llm_sweep}
-\title{Mode 1: Parameter Sweep - Vary One Parameter, Fixed Message}
+\title{Parallel API calls: Parameter Sweep - Vary One Parameter, Fixed Message}
 \usage{
 call_llm_sweep(base_config, param_name, param_values, messages, ...)
 }
@@ -13,30 +13,45 @@ call_llm_sweep(base_config, param_name, param_values, messages, ...)
 
 \item{param_values}{Vector. Values to test for the parameter.}
 
-\item{messages}{List of message objects (same for all calls).}
+\item{messages}{A character vector or a list of message objects (same for all calls).}
 
-\item{...}{Additional arguments passed to `call_llm_par` (e.g., tries, verbose, progress).}
+\item{...}{Additional arguments passed to \code{call_llm_par} (e.g., tries, verbose, progress).}
 }
 \value{
 A tibble with columns: swept_param_name, the varied parameter column, provider, model,
-  all other model parameters, response_text, raw_response_json, success, error_message.
+all other model parameters, response_text, raw_response_json, success, error_message.
 }
 \description{
 Sweeps through different values of a single parameter while keeping the message constant.
 Perfect for hyperparameter tuning, temperature experiments, etc.
-This function requires setting up the parallel environment using `setup_llm_parallel`.
+This function requires setting up the parallel environment using \code{setup_llm_parallel}.
 }
+\section{Parallel Workflow}{
+
+All parallel functions require the \code{future} backend to be configured.
+The recommended workflow is:
+\enumerate{
+\item Call \code{setup_llm_parallel()} once at the start of your script.
+\item Run one or more parallel experiments (e.g., \code{call_llm_broadcast()}).
+\item Call \code{reset_llm_parallel()} at the end to restore sequential processing.
+}
+}
+
 \examples{
 \dontrun{
   # Temperature sweep
-  config <- llm_config(provider = "openai", model = "gpt-4o-mini",
+  config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
                        api_key = Sys.getenv("OPENAI_API_KEY"))
 
-  messages <- list(list(role = "user", content = "What is 15 * 23?"))
+  messages <- "What is 15 * 23?"
   temperatures <- c(0, 0.3, 0.7, 1.0, 1.5)
 
   setup_llm_parallel(workers = 4, verbose = TRUE)
   results <- call_llm_sweep(config, "temperature", temperatures, messages)
+  results |> dplyr::select(temperature, response_text)
   reset_llm_parallel(verbose = TRUE)
 }
+}
+\seealso{
+\code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}
 }

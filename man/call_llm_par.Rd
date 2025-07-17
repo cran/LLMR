@@ -9,7 +9,7 @@ call_llm_par(
   simplify = TRUE,
   tries = 10,
   wait_seconds = 2,
-  backoff_factor = 2,
+  backoff_factor = 3,
   verbose = FALSE,
   memoize = FALSE,
   max_workers = NULL,
@@ -19,7 +19,7 @@ call_llm_par(
 }
 \arguments{
 \item{experiments}{A tibble/data.frame with required list-columns 'config' (llm_config objects)
-and 'messages' (message lists). Additional columns are treated as metadata and preserved.}
+and 'messages' (character vector OR message list).}
 
 \item{simplify}{Whether to cbind 'experiments' to the output data frame or not.}
 
@@ -42,43 +42,47 @@ This parameter is kept for backward compatibility but has no effect.}
 }
 \value{
 A tibble containing all original columns from experiments (metadata, config, messages),
-  plus new columns: response_text, raw_response_json (the raw JSON string from the API),
-  success, error_message, duration (in seconds).
+plus new columns: response_text, raw_response_json (the raw JSON string from the API),
+success, error_message, duration (in seconds).
 }
 \description{
 Processes experiments from a tibble where each row contains a config and message pair.
 This is the core parallel processing function. Metadata columns are preserved.
-This function requires setting up the parallel environment using `setup_llm_parallel`.
+This function requires setting up the parallel environment using \code{setup_llm_parallel}.
 }
+\section{Parallel Workflow}{
+
+All parallel functions require the \code{future} backend to be configured.
+The recommended workflow is:
+\enumerate{
+\item Call \code{setup_llm_parallel()} once at the start of your script.
+\item Run one or more parallel experiments (e.g., \code{call_llm_broadcast()}).
+\item Call \code{reset_llm_parallel()} at the end to restore sequential processing.
+}
+}
+
 \examples{
 \dontrun{
-  library(dplyr)
-  library(tidyr)
+# Simple example: Compare two models on one prompt
+cfg1 <- llm_config("openai", "gpt-4.1-nano", Sys.getenv("OPENAI_API_KEY"))
+cfg2 <- llm_config("groq", "llama-3.3-70b-versatile", Sys.getenv("GROQ_API_KEY"))
 
-  # Build experiments with expand_grid
-  experiments <- expand_grid(
-    condition = c("control", "treatment"),
-    model_type = c("small", "large"),
-    rep = 1:10
-  ) |>
-    mutate(
-      config = case_when(
-        model_type == "small" ~ list(small_config),
-        model_type == "large" ~ list(large_config)
-      ),
-      messages = case_when(
-        condition == "control" ~ list(control_messages),
-        condition == "treatment" ~ list(treatment_messages)
-      )
-    )
+experiments <- tibble::tibble(
+  model_id = c("gpt-4.1-nano", "groq-llama-3.3"),
+  config = list(cfg1, cfg2),
+  messages = "Count the number of the letter e in this word: Freundschaftsbeziehungen "
+)
 
-  setup_llm_parallel(workers = 4)
-  results <- call_llm_par(experiments, progress = TRUE)
-  reset_llm_parallel()
+setup_llm_parallel(workers = 2)
+results <- call_llm_par(experiments, progress = TRUE)
+reset_llm_parallel()
 
-  # All metadata preserved for analysis
-  results |>
-    group_by(condition, model_type) |>
-    summarise(mean_response = mean(as.numeric(response_text), na.rm = TRUE))
+print(results[, c("model_id", "response_text")])
+
 }
+}
+\seealso{
+For setting up the environment: \code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}.
+For simpler, pre-configured parallel tasks: \code{\link{call_llm_broadcast}}, \code{\link{call_llm_sweep}}, \code{\link{call_llm_compare}}.
+For creating experiment designs: \code{\link{build_factorial_experiments}}.
 }

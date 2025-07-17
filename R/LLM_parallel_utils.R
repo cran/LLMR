@@ -28,6 +28,11 @@
 # Dependencies: future, future.apply, tibble, dplyr, progressr (optional), tidyr (for build_factorial_experiments)
 # -------------------------------------------------------------------
 
+# message builder (simple user + optional system) --------------------
+.compose_msg <- function(user, sys = NULL) {
+  if (is.null(sys)) user else c(system = sys, user = user)
+}
+
 # Internal helper to unnest config details into columns
 .unnest_config_to_cols <- function(results_df, config_col = "config") {
   if (!config_col %in% names(results_df) || !is.list(results_df[[config_col]])) {
@@ -36,8 +41,18 @@
   }
 
   # Extract provider and model
-  results_df$provider <- sapply(results_df[[config_col]], function(cfg) cfg$provider %||% NA_character_)
-  results_df$model    <- sapply(results_df[[config_col]], function(cfg) cfg$model %||% NA_character_)
+  #results_df$provider <- sapply(results_df[[config_col]], function(cfg) cfg$provider %||% NA_character_)
+  #results_df$model    <- sapply(results_df[[config_col]], function(cfg) cfg$model %||% NA_character_)
+
+  if (!"provider" %in% names(results_df)) {
+    results_df$provider <- sapply(results_df[[config_col]],
+                                  function(cfg) cfg$provider %||% NA_character_)
+  }
+  if (!"model" %in% names(results_df)) {
+    results_df$model <- sapply(results_df[[config_col]],
+                               function(cfg) cfg$model %||% NA_character_)
+  }
+
 
   # Extract all model parameters
   all_model_param_names <- unique(unlist(lapply(results_df[[config_col]], function(cfg) names(cfg$model_params))))
@@ -50,8 +65,28 @@
       })
     })
     names(param_cols_list) <- all_model_param_names
+    #params_df <- tibble::as_tibble(param_cols_list)
+    #results_df <- dplyr::bind_cols(results_df, params_df)
+
     params_df <- tibble::as_tibble(param_cols_list)
+    # ------------------------------------------------------------------
+    # avoid duplicate names coming from the input tibble
+    # ------------------------------------------------------------------
+    dup_params <- intersect(names(params_df), names(results_df))
+    if (length(dup_params) > 0) {
+      # If both columns exist but differ, keep the one already in results_df
+      for (p in dup_params) {
+        if (!identical(params_df[[p]], results_df[[p]])) {
+          warning(sprintf(
+            "Parameter '%s' is present both in the input data and in the config; keeping the existing column.",
+            p))
+        }
+      }
+      params_df <- params_df[, setdiff(names(params_df), dup_params), drop = FALSE]
+    }
+
     results_df <- dplyr::bind_cols(results_df, params_df)
+
   }
 
   # Identify metadata columns (everything except standard columns)
@@ -80,7 +115,7 @@
   return(results_df)
 }
 
-#' Mode 1: Parameter Sweep - Vary One Parameter, Fixed Message
+#' Parallel API calls: Parameter Sweep - Vary One Parameter, Fixed Message
 #'
 #' Sweeps through different values of a single parameter while keeping the message constant.
 #' Perfect for hyperparameter tuning, temperature experiments, etc.
@@ -89,24 +124,33 @@
 #' @param base_config Base llm_config object to modify.
 #' @param param_name Character. Name of the parameter to vary (e.g., "temperature", "max_tokens").
 #' @param param_values Vector. Values to test for the parameter.
-#' @param messages List of message objects (same for all calls).
+#' @param messages A character vector or a list of message objects (same for all calls).
 #' @param ... Additional arguments passed to `call_llm_par` (e.g., tries, verbose, progress).
 #'
 #' @return A tibble with columns: swept_param_name, the varied parameter column, provider, model,
 #'   all other model parameters, response_text, raw_response_json, success, error_message.
+#' @section Parallel Workflow:
+#' All parallel functions require the `future` backend to be configured.
+#' The recommended workflow is:
+#' 1. Call `setup_llm_parallel()` once at the start of your script.
+#' 2. Run one or more parallel experiments (e.g., `call_llm_broadcast()`).
+#' 3. Call `reset_llm_parallel()` at the end to restore sequential processing.
+#'
+#' @seealso \code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #'   # Temperature sweep
-#'   config <- llm_config(provider = "openai", model = "gpt-4o-mini",
+#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
 #'                        api_key = Sys.getenv("OPENAI_API_KEY"))
 #'
-#'   messages <- list(list(role = "user", content = "What is 15 * 23?"))
+#'   messages <- "What is 15 * 23?"
 #'   temperatures <- c(0, 0.3, 0.7, 1.0, 1.5)
 #'
 #'   setup_llm_parallel(workers = 4, verbose = TRUE)
 #'   results <- call_llm_sweep(config, "temperature", temperatures, messages)
+#'   results |> dplyr::select(temperature, response_text)
 #'   reset_llm_parallel(verbose = TRUE)
 #' }
 call_llm_sweep <- function(base_config,
@@ -134,8 +178,7 @@ call_llm_sweep <- function(base_config,
 
   # Build experiments tibble
   experiments <- tibble::tibble(
-    .param_name_sweep = param_name,
-    .param_value_sweep = param_values,
+    !!param_name := param_values, # Use the actual parameter name directly
     config = lapply(param_values, function(val) {
       modified_config <- base_config
       if (is.null(modified_config$model_params)) modified_config$model_params <- list()
@@ -146,78 +189,64 @@ call_llm_sweep <- function(base_config,
   )
 
   # Run parallel processing
-  results_raw <- call_llm_par(experiments, ...)
+  results_final <- call_llm_par(experiments, ...)
   results_final$config <- NULL
-
-  # Create the parameter column with actual name
-  results_final[[param_name]] <- results_final$.param_value_sweep
-  results_final$swept_param_name <- results_final$.param_name_sweep
-
-  # Remove temporary columns
-  results_final$.param_name_sweep <- NULL
-  results_final$.param_value_sweep <- NULL
-
-  # Identify column groups
-  meta_cols <- setdiff(names(results_final), c("swept_param_name", param_name, "provider", "model",
-                                               "response_text", "raw_response_json", "success", "error_message"))
-
-  all_model_param_names_unnested <- setdiff(
-    names(results_final)[!names(results_final) %in% c(meta_cols, "swept_param_name", param_name,
-                                                      "provider", "model", "response_text",
-                                                      "raw_response_json", "success", "error_message")],
-    param_name
-  )
-
-  # Final column ordering
-  final_order <- c("swept_param_name", param_name, meta_cols, "provider", "model",
-                   all_model_param_names_unnested,
-                   "response_text", "raw_response_json", "success", "error_message")
-  final_order_existing <- final_order[final_order %in% names(results_final)]
-  remaining_cols <- setdiff(names(results_final), final_order_existing)
-
-  results_final <- results_final[, c(final_order_existing, remaining_cols)]
-
   return(results_final)
 }
 
-#' Mode 2: Message Broadcast - Fixed Config, Multiple Messages
+#' Parallel API calls: Fixed Config, Multiple Messages
 #'
 #' Broadcasts different messages using the same configuration in parallel.
 #' Perfect for batch processing different prompts with consistent settings.
 #' This function requires setting up the parallel environment using `setup_llm_parallel`.
 #'
 #' @param config Single llm_config object to use for all calls.
-#' @param messages_list A list of message lists, each for one API call.
+#' @param messages A character vector (each element is a prompt) OR
+#'   a list where each element is a pre-formatted message list.
 #' @param ... Additional arguments passed to `call_llm_par` (e.g., tries, verbose, progress).
 #'
 #' @return A tibble with columns: message_index (metadata), provider, model,
 #'   all model parameters, response_text, raw_response_json, success, error_message.
+#' @section Parallel Workflow:
+#' All parallel functions require the `future` backend to be configured.
+#' The recommended workflow is:
+#' 1. Call `setup_llm_parallel()` once at the start of your script.
+#' 2. Run one or more parallel experiments (e.g., `call_llm_broadcast()`).
+#' 3. Call `reset_llm_parallel()` at the end to restore sequential processing.
+#'
+#' @seealso \code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #'   # Broadcast different questions
-#'   config <- llm_config(provider = "openai", model = "gpt-4o-mini",
+#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
 #'                        api_key = Sys.getenv("OPENAI_API_KEY"))
 #'
-#'   messages_list <- list(
+#'   messages <- list(
 #'     list(list(role = "user", content = "What is 2+2?")),
 #'     list(list(role = "user", content = "What is 3*5?")),
 #'     list(list(role = "user", content = "What is 10/2?"))
 #'   )
 #'
 #'   setup_llm_parallel(workers = 4, verbose = TRUE)
-#'   results <- call_llm_broadcast(config, messages_list)
+#'   results <- call_llm_broadcast(config, messages)
 #'   reset_llm_parallel(verbose = TRUE)
 #' }
 call_llm_broadcast <- function(config,
-                               messages_list,
+                               messages,
                                ...) {
+
+  # Allow plain character vectors for convenience
+  if (is.character(messages))
+    messages <- as.list(messages)
+
   if (!requireNamespace("tibble", quietly = TRUE)) {
     stop("The 'tibble' package is required. Please install it with: install.packages('tibble')")
   }
 
-  if (length(messages_list) == 0) {
+  if (length(messages) == 0) {
     warning("No messages provided. Returning empty tibble.")
     return(tibble::tibble(
       message_index = integer(0),
@@ -232,30 +261,37 @@ call_llm_broadcast <- function(config,
 
   # Build experiments tibble
   experiments <- tibble::tibble(
-    message_index = seq_along(messages_list),
-    config = rep(list(config), length(messages_list)),
-    messages = messages_list
+    message_index = seq_along(messages),
+    config = rep(list(config), length(messages)),
+    messages = messages
   )
 
   # Run parallel processing
-  results_raw <- call_llm_par(experiments, ...)
-  results_final <- results_raw
+  results_final <- call_llm_par(experiments, ...)
   results_final$config <- NULL
   return(results_final)
 }
 
-#' Mode 3: Model Comparison - Multiple Configs, Fixed Message
+#' Parallel API calls: Multiple Configs, Fixed Message
 #'
 #' Compares different configurations (models, providers, settings) using the same message.
 #' Perfect for benchmarking across different models or providers.
 #' This function requires setting up the parallel environment using `setup_llm_parallel`.
 #'
 #' @param configs_list A list of llm_config objects to compare.
-#' @param messages List of message objects (same for all configs).
+#' @param messages A character vector or a list of message objects (same for all configs).
 #' @param ... Additional arguments passed to `call_llm_par` (e.g., tries, verbose, progress).
 #'
 #' @return A tibble with columns: config_index (metadata), provider, model,
 #'   all varying model parameters, response_text, raw_response_json, success, error_message.
+#' @section Parallel Workflow:
+#' All parallel functions require the `future` backend to be configured.
+#' The recommended workflow is:
+#' 1. Call `setup_llm_parallel()` once at the start of your script.
+#' 2. Run one or more parallel experiments (e.g., `call_llm_broadcast()`).
+#' 3. Call `reset_llm_parallel()` at the end to restore sequential processing.
+#'
+#' @seealso \code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}
 #' @export
 #'
 #' @examples
@@ -263,11 +299,11 @@ call_llm_broadcast <- function(config,
 #'   # Compare different models
 #'   config1 <- llm_config(provider = "openai", model = "gpt-4o-mini",
 #'                         api_key = Sys.getenv("OPENAI_API_KEY"))
-#'   config2 <- llm_config(provider = "openai", model = "gpt-3.5-turbo",
+#'   config2 <- llm_config(provider = "openai", model = "gpt-4.1-nano",
 #'                         api_key = Sys.getenv("OPENAI_API_KEY"))
 #'
 #'   configs_list <- list(config1, config2)
-#'   messages <- list(list(role = "user", content = "Explain quantum computing"))
+#'   messages <- "Explain quantum computing"
 #'
 #'   setup_llm_parallel(workers = 4, verbose = TRUE)
 #'   results <- call_llm_compare(configs_list, messages)
@@ -315,7 +351,7 @@ call_llm_compare <- function(configs_list,
 #' This function requires setting up the parallel environment using `setup_llm_parallel`.
 #'
 #' @param experiments A tibble/data.frame with required list-columns 'config' (llm_config objects)
-#'   and 'messages' (message lists). Additional columns are treated as metadata and preserved.
+#'   and 'messages' (character vector OR message list).
 #' @param simplify Whether to cbind 'experiments' to the output data frame or not.
 #' @param tries Integer. Number of retries for each call. Default is 10.
 #' @param wait_seconds Numeric. Initial wait time (seconds) before retry. Default is 2.
@@ -330,44 +366,45 @@ call_llm_compare <- function(configs_list,
 #' @return A tibble containing all original columns from experiments (metadata, config, messages),
 #'   plus new columns: response_text, raw_response_json (the raw JSON string from the API),
 #'   success, error_message, duration (in seconds).
+#'
+
+#' @section Parallel Workflow:
+#' All parallel functions require the `future` backend to be configured.
+#' The recommended workflow is:
+#' 1. Call `setup_llm_parallel()` once at the start of your script.
+#' 2. Run one or more parallel experiments (e.g., `call_llm_broadcast()`).
+#' 3. Call `reset_llm_parallel()` at the end to restore sequential processing.
+#'
+#' @seealso
+#' For setting up the environment: \code{\link{setup_llm_parallel}}, \code{\link{reset_llm_parallel}}.
+#' For simpler, pre-configured parallel tasks: \code{\link{call_llm_broadcast}}, \code{\link{call_llm_sweep}}, \code{\link{call_llm_compare}}.
+#' For creating experiment designs: \code{\link{build_factorial_experiments}}.
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#'   library(dplyr)
-#'   library(tidyr)
+#' # Simple example: Compare two models on one prompt
+#' cfg1 <- llm_config("openai", "gpt-4.1-nano", Sys.getenv("OPENAI_API_KEY"))
+#' cfg2 <- llm_config("groq", "llama-3.3-70b-versatile", Sys.getenv("GROQ_API_KEY"))
 #'
-#'   # Build experiments with expand_grid
-#'   experiments <- expand_grid(
-#'     condition = c("control", "treatment"),
-#'     model_type = c("small", "large"),
-#'     rep = 1:10
-#'   ) |>
-#'     mutate(
-#'       config = case_when(
-#'         model_type == "small" ~ list(small_config),
-#'         model_type == "large" ~ list(large_config)
-#'       ),
-#'       messages = case_when(
-#'         condition == "control" ~ list(control_messages),
-#'         condition == "treatment" ~ list(treatment_messages)
-#'       )
-#'     )
+#' experiments <- tibble::tibble(
+#'   model_id = c("gpt-4.1-nano", "groq-llama-3.3"),
+#'   config = list(cfg1, cfg2),
+#'   messages = "Count the number of the letter e in this word: Freundschaftsbeziehungen "
+#' )
 #'
-#'   setup_llm_parallel(workers = 4)
-#'   results <- call_llm_par(experiments, progress = TRUE)
-#'   reset_llm_parallel()
+#' setup_llm_parallel(workers = 2)
+#' results <- call_llm_par(experiments, progress = TRUE)
+#' reset_llm_parallel()
 #'
-#'   # All metadata preserved for analysis
-#'   results |>
-#'     group_by(condition, model_type) |>
-#'     summarise(mean_response = mean(as.numeric(response_text), na.rm = TRUE))
+#' print(results[, c("model_id", "response_text")])
+#'
 #' }
 call_llm_par <- function(experiments,
                          simplify = TRUE,
                          tries = 10,
                          wait_seconds = 2,
-                         backoff_factor = 2,
+                         backoff_factor = 3,
                          verbose = FALSE,
                          memoize = FALSE,
                          max_workers = NULL,
@@ -537,7 +574,7 @@ call_llm_par <- function(experiments,
   }
 
   if (simplify) {
-     output_df <- .unnest_config_to_cols(output_df, config_col = "config")
+    output_df <- .unnest_config_to_cols(output_df, config_col = "config")
   }
 
   return(output_df)
@@ -549,10 +586,13 @@ call_llm_par <- function(experiments,
 #' all combinations of configs, messages, and repetitions with automatic metadata.
 #'
 #' @param configs List of llm_config objects to test.
-#' @param messages_list List of message lists to test (each element is a message list for one condition).
 #' @param repetitions Integer. Number of repetitions per combination. Default is 1.
 #' @param config_labels Character vector of labels for configs. If NULL, uses "provider_model".
-#' @param message_labels Character vector of labels for message sets. If NULL, uses "messages_1", etc.
+#' @param user_prompts Character vector (or list) of user‑turn prompts.
+#' @param user_prompt_labels Optional labels for the user prompts.
+#' @param system_prompts  Optional character vector of system messages
+#'                        (recycled against user_prompts).
+#' @param system_prompt_labels Optional labels for the system prompts.
 #'
 #' @return A tibble with columns: config (list-column), messages (list-column),
 #'   config_label, message_label, and repetition. Ready for use with call_llm_par().
@@ -562,11 +602,11 @@ call_llm_par <- function(experiments,
 #' \dontrun{
 #'   # Factorial design: 3 configs x 2 message conditions x 10 reps = 60 experiments
 #'   configs <- list(gpt4_config, claude_config, llama_config)
-#'   messages_list <- list(control_messages, treatment_messages)
+#'   messages <- list("Control prompt", "Treatment prompt")
 #'
 #'   experiments <- build_factorial_experiments(
 #'     configs = configs,
-#'     messages_list = messages_list,
+#'     messages = messages,
 #'     repetitions = 10,
 #'     config_labels = c("gpt4", "claude", "llama"),
 #'     message_labels = c("control", "treatment")
@@ -576,10 +616,20 @@ call_llm_par <- function(experiments,
 #'   results <- call_llm_par(experiments, progress = TRUE)
 #' }
 build_factorial_experiments <- function(configs,
-                                        messages_list,
+                                        user_prompts,
+                                        system_prompts = NULL,
                                         repetitions = 1,
-                                        config_labels = NULL,
-                                        message_labels = NULL) {
+                                        config_labels  = NULL,
+                                        user_prompt_labels = NULL,
+                                        system_prompt_labels = NULL
+                                        ) {
+
+  # if (!missing(messages)) {
+  #   lifecycle::deprecate_stop("0.5.0", "build_factorial_experiments(messages = )",
+  #                             "build_factorial_experiments(user_prompts = )")
+  # }
+
+  if (inherits(configs, "llm_config")) configs <- list(configs)
 
   if (!requireNamespace("tibble", quietly = TRUE)) {
     stop("The 'tibble' package is required. Please install it with: install.packages('tibble')")
@@ -592,8 +642,8 @@ build_factorial_experiments <- function(configs,
   }
 
   # Validate inputs
-  if (length(configs) == 0 || length(messages_list) == 0) {
-    stop("Both configs and messages_list must have at least one element")
+  if (length(configs) == 0 || length(user_prompts) == 0) {
+    stop("Both configs and user_prompts must have at least one element")
   }
 
   # Create config labels if not provided
@@ -605,41 +655,55 @@ build_factorial_experiments <- function(configs,
     stop("config_labels must have the same length as configs")
   }
 
-  # Create message labels if not provided
-  if (is.null(message_labels)) {
-    message_labels <- paste0("messages_", seq_along(messages_list))
-  } else if (length(message_labels) != length(messages_list)) {
-    stop("message_labels must have the same length as messages_list")
+  # Create user‑prompt labels if not provided
+  if (is.null(user_prompt_labels)) {
+    user_prompt_labels <- paste0("user_", seq_along(user_prompts))
+  } else if (length(user_prompt_labels) != length(user_prompts)) {
+    stop("user_prompt_labels must have the same length as user_prompts")
   }
-
-  # Create lookup tables
+  ## ------------------------------------------------------------------------
   configs_df <- tibble::tibble(
-    config_idx = seq_along(configs),
-    config = configs,
-    config_label = config_labels
+    config_idx   = seq_along(configs),
+    config       = configs,
+    config_label = config_labels %||%
+      paste(vapply(configs, `[[`, "", "model"), seq_along(configs))
   )
 
-  messages_df <- tibble::tibble(
-    message_idx = seq_along(messages_list),
-    messages = messages_list,
-    message_label = message_labels
+  user_df <- tibble::tibble(
+    user_idx   = seq_along(user_prompts),
+    user_prompt = user_prompts,
+    user_prompt_label = user_prompt_labels %||%
+      paste0("user_", seq_along(user_prompts))
   )
 
-  # Create factorial design
+  sys_df <- if (!is.null(system_prompts)) tibble::tibble(
+    sys_idx   = seq_along(system_prompts),
+    system_prompt = system_prompts,
+    system_prompt_label = system_prompt_labels %||%
+      paste0("system_", seq_along(system_prompts))
+  ) else tibble::tibble(
+    sys_idx = 1L,
+    system_prompt = NA_character_,
+    system_prompt_label = NA_character_
+  )
+
   experiments <- tidyr::expand_grid(
-    config_idx = configs_df$config_idx,
-    message_idx = messages_df$message_idx,
+    configs_df, user_df, sys_df,
     repetition = seq_len(repetitions)
   ) |>
-    dplyr::left_join(configs_df, by = "config_idx") |>
-    dplyr::left_join(messages_df, by = "message_idx") |>
-    dplyr::select(config, messages, config_label, message_label, repetition)
-
-  message(sprintf("Built %d experiments: %d configs x %d message sets x %d repetitions",
-                  nrow(experiments), length(configs), length(messages_list), repetitions))
+    dplyr::mutate(
+      messages = purrr::map2(user_prompt, system_prompt, .compose_msg)
+    ) |>
+    dplyr::select(config, messages,
+                  config_label,
+                  user_prompt_label,
+                  system_prompt_label,
+                  repetition)
 
   return(experiments)
 }
+
+
 
 #' Setup Parallel Environment for LLM Processing
 #'

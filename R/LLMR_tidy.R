@@ -1,5 +1,6 @@
 # LLMR_tidy.R ---------------------------------------------------------------
-#' Vectorised LLM transformer
+
+#' Applies an LLM prompt to every element of a vector
 #'
 #' @importFrom tidyr expand_grid
 #' @importFrom rlang `:=`
@@ -22,13 +23,22 @@
 #'   Failed calls yield \code{NA}.
 #' @details
 #' Runs each prompt through `call_llm_broadcast()`, which forwards the
-#' requests to `call_llm_par()`.  That core engine executes them **in
-#' parallel** according to the current *future* plan.  For instant
-#' multi-core use, call `setup_llm_parallel(workers = 4)` (or whatever
+#' requests to `call_llm_par()`.
+#' Internally each prompt is passed as a
+#' **plain character vector** (or a
+#' named character vector when `.system_prompt` is supplied).
+#' That core engine executes them *in parallel* according
+#' to the current *future* plan.
+#' For instant multi-core use, call `setup_llm_parallel(workers = 4)` (or whatever
 #' number you prefer) once per session; revert with `reset_llm_parallel()`.
 #'
-#' @seealso setup_llm_parallel, reset_llm_parallel, call_llm_par
 #' @export
+#'
+#' @seealso
+#' \code{\link{setup_llm_parallel}},
+#' \code{\link{reset_llm_parallel}},
+#' \code{\link{call_llm_par}}, and
+#' \code{\link{llm_mutate}} which is a tidy-friendly wrapper around `llm_fn()`.
 #'
 #' @examples
 #' ## --- Vector input ------------------------------------------------------
@@ -81,18 +91,15 @@ llm_fn <- function(x,
 
   msgs <- lapply(user_txt, function(txt) {
     if (is.null(.system_prompt)) {
-      list(list(role = "user", content = txt))
+      txt                                   # single-turn chat
     } else {
-      list(
-        list(role = "system", content = .system_prompt),
-        list(role = "user",   content = txt)
-      )
+      c(system = .system_prompt, user = txt)  # named vector: system then user
     }
   })
 
   res <- call_llm_broadcast(
-    config        = .config,
-    messages_list = msgs,
+    config   = .config,
+    messages = msgs,
     ...
   )
 
@@ -113,8 +120,13 @@ llm_fn <- function(x,
 #' parallel behaviour.  Activate parallelism with
 #' `setup_llm_parallel()` and shut it off with `reset_llm_parallel()`.
 #'
-#' @seealso llm_fn, setup_llm_parallel, reset_llm_parallel
 #' @export
+#'
+#' @seealso
+#' \code{\link{setup_llm_parallel}},
+#' \code{\link{reset_llm_parallel}},
+#' \code{\link{call_llm_par}},
+#' \code{\link{llm_fn}}
 #'
 #' @examples
 #' ## See examples under \link{llm_fn}.
@@ -140,9 +152,3 @@ llm_mutate <- function(.data,
       .after  = {{ .after }}
     )
 }
-
-utils::globalVariables(
-  c("config", "messages", "config_label",
-    "message_label", "repetition",
-    ".param_name_sweep", ".param_value_sweep")
-)
