@@ -2,81 +2,56 @@
 % Please edit documentation in R/LLMR_tidy.R
 \name{llm_fn}
 \alias{llm_fn}
-\title{Applies an LLM prompt to every element of a vector}
+\title{Apply an LLM prompt over vectors/data frames}
 \usage{
-llm_fn(x, prompt, .config, .system_prompt = NULL, ...)
+llm_fn(
+  x,
+  prompt,
+  .config,
+  .system_prompt = NULL,
+  ...,
+  .return = c("text", "columns", "object")
+)
 }
 \arguments{
-\item{x}{A character vector \strong{or} a data.frame/tibble.}
+\item{x}{A character vector \emph{or} a data.frame/tibble.}
 
-\item{prompt}{A glue template string.
-\emph{If} \code{x} is a data frame, use \code{{col}} placeholders;
-\emph{if} \code{x} is a vector, refer to the element as \code{{x}}.}
+\item{prompt}{A glue template string. With a data-frame you may reference
+columns (\code{{col}}); with a vector the placeholder is \code{{x}}.}
 
 \item{.config}{An \link{llm_config} object.}
 
 \item{.system_prompt}{Optional system message (character scalar).}
 
-\item{...}{Passed unchanged to \link{call_llm_broadcast} (e.g.\ \code{tries},
+\item{...}{Passed unchanged to \code{\link[=call_llm_broadcast]{call_llm_broadcast()}} (e.g. \code{tries},
 \code{progress}, \code{verbose}).}
+
+\item{.return}{One of \code{c("text","columns","object")}. \code{"columns"}
+returns a tibble of diagnostic columns; \code{"text"} returns a character
+vector; \code{"object"} returns a list of \code{llmr_response} (or \code{NA} on failure).}
 }
 \value{
-A character vector the same length as \code{x}.
-Failed calls yield \code{NA}.
+For generative mode:
+\itemize{
+\item \code{.return = "text"}: character vector
+\item \code{.return = "columns"}: tibble with diagnostics
+\item \code{.return = "object"}: list of \code{llmr_response} (or \code{NA} on failure)
+For embedding mode, always a numeric matrix.
+}
 }
 \description{
-Applies an LLM prompt to every element of a vector
-}
-\details{
-Runs each prompt through \code{call_llm_broadcast()}, which forwards the
-requests to \code{call_llm_par()}.
-Internally each prompt is passed as a
-\strong{plain character vector} (or a
-named character vector when \code{.system_prompt} is supplied).
-That core engine executes them \emph{in parallel} according
-to the current \emph{future} plan.
-For instant multi-core use, call \code{setup_llm_parallel(workers = 4)} (or whatever
-number you prefer) once per session; revert with \code{reset_llm_parallel()}.
+Apply an LLM prompt over vectors/data frames
 }
 \examples{
-## --- Vector input ------------------------------------------------------
-\dontrun{
-cfg <- llm_config(
-  provider = "openai",
-  model    = "gpt-4.1-nano",
-  api_key  =  Sys.getenv("OPENAI_API_KEY"),
-  temperature = 0
-)
-
-words <- c("excellent", "awful", "average")
-
-llm_fn(
-  words,
-  prompt   = "Classify sentiment of '{x}' as Positive, Negative, or Neutral.",
-  .config  = cfg,
-  .system_prompt = "Respond with ONE word only."
-)
-
-## --- Data-frame input inside a tidyverse pipeline ----------------------
-library(dplyr)
-
-reviews <- tibble::tibble(
-  id     = 1:3,
-  review = c("Great toaster!", "Burns bread.", "It's okay.")
-)
-
-reviews |>
-  llm_mutate(
-    sentiment,
-    prompt  = "Classify the sentiment of this review: {review}",
-    .config = cfg,
-    .system_prompt = "Respond with Positive, Negative, or Neutral."
-  )
+if (interactive()) {
+  words <- c("excellent","awful")
+  cfg <- llm_config("openai","gpt-4o-mini", temperature = 0)
+  llm_fn(words, "Classify '{x}' as Positive/Negative.",
+         cfg,
+         .system_prompt="One word.",
+         .return="columns")
 }
 }
 \seealso{
-\code{\link{setup_llm_parallel}},
-\code{\link{reset_llm_parallel}},
-\code{\link{call_llm_par}}, and
-\code{\link{llm_mutate}} which is a tidy-friendly wrapper around \code{llm_fn()}.
+\code{\link[=llm_mutate]{llm_mutate()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}, \code{\link[=call_llm_broadcast]{call_llm_broadcast()}}
 }

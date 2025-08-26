@@ -41,9 +41,19 @@ and 'messages' (character vector OR message list).}
 This parameter is kept for backward compatibility but has no effect.}
 }
 \value{
-A tibble containing all original columns from experiments (metadata, config, messages),
-plus new columns: response_text, raw_response_json (the raw JSON string from the API),
-success, error_message, duration (in seconds).
+A tibble containing all original columns plus:
+\itemize{
+\item \code{response_text} – assistant text (or \code{NA} on failure)
+\item \code{raw_response_json} – raw JSON string
+\item \code{success}, \code{error_message}
+\item \code{finish_reason} – e.g. "stop", "length", "filter", "tool", or "error:\code{category}"
+\item \code{sent_tokens}, \code{rec_tokens}, \code{total_tokens}, \code{reasoning_tokens}
+\item \code{response_id}
+\item \code{duration} – seconds
+\item \code{response} – the full \code{llmr_response} object (or \code{NA} on failure)
+}
+
+The \code{response} column holds \code{llmr_response} objects on success, or \code{NULL} on failure.
 }
 \description{
 Processes experiments from a tibble where each row contains a config and message pair.
@@ -64,8 +74,8 @@ The recommended workflow is:
 \examples{
 \dontrun{
 # Simple example: Compare two models on one prompt
-cfg1 <- llm_config("openai", "gpt-4.1-nano", Sys.getenv("OPENAI_API_KEY"))
-cfg2 <- llm_config("groq", "llama-3.3-70b-versatile", Sys.getenv("GROQ_API_KEY"))
+cfg1 <- llm_config("openai", "gpt-4.1-nano")
+cfg2 <- llm_config("groq", "llama-3.3-70b-versatile")
 
 experiments <- tibble::tibble(
   model_id = c("gpt-4.1-nano", "groq-llama-3.3"),

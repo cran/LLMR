@@ -16,6 +16,68 @@
 #   4. log_llm_error() - A convenience function for logging errors
 #      with timestamps.
 #
+
+
+#--------- Helper
+#' Construct and throw structured LLMR errors
+#'
+#' Creates a typed error with a category-specific subclass, plus a common
+#' `llmr_api_error` base class. Extra fields (e.g., `param`) are attached
+#' as condition attributes for handlers to inspect.
+#'
+#' Classes produced:
+#'   - llmr_api_param_error
+#'   - llmr_api_auth_error
+#'   - llmr_api_rate_limit_error
+#'   - llmr_api_server_error
+#'   - llmr_api_unknown_error
+#'
+#' @keywords internal
+#' @noRd
+.llmr_error <- function(message, category = c("param","auth","rate_limit","server","unknown"),
+                        status_code = NA_integer_,
+                        provider = NA_character_,
+                        model = NA_character_,
+                        param = NA_character_,
+                        code = NA_character_,
+                        request_id = NA_character_) {
+
+  category <- match.arg(category)
+  cls <- c(
+    paste0("llmr_api_", category, "_error"),
+    "llmr_api_error", "error", "condition"
+  )
+
+  # Use cli if available; fall back to rlang otherwise
+  if (requireNamespace("cli", quietly = TRUE)) {
+    cli::cli_abort(
+      message = message,
+      class   = cls,
+      # attach fields for tryCatch handlers
+      status_code = status_code,
+      provider    = provider,
+      model       = model,
+      param       = param,
+      code        = code,
+      request_id  = request_id
+    )
+  } else {
+    rlang::abort(
+      message = message,
+      class   = cls,
+      status_code = status_code,
+      provider    = provider,
+      model       = model,
+      param       = param,
+      code        = code,
+      request_id  = request_id
+    )
+  }
+}
+
+
+
+
 # -------------------------------------------------------------------
 # 1. Exponential Backoff (Internal)
 # -------------------------------------------------------------------
@@ -29,7 +91,7 @@ retry_with_backoff <- function(func,
                                backoff_factor = 5,
                                error_filter_func = NULL,
                                ...) {
-  wait_time <- initial_wait
+  wait_time <- initial_wait  # backoff timer; updated after each failure
   for (attempt in seq_len(tries)) {
     result <- tryCatch(
       func(...),
@@ -68,7 +130,6 @@ retry_with_backoff <- function(func,
 #' @param wait_seconds Numeric. Initial wait time (seconds) before the first retry. Default is 10.
 #' @param backoff_factor Numeric. Multiplier for wait time after each failure. Default is 5.
 #' @param verbose Logical. If TRUE, prints the full API response.
-#' @param json Logical. If TRUE, returns the raw JSON as an attribute.
 #' @param memoize Logical. If TRUE, calls are cached to avoid repeated identical requests. Default is FALSE.
 #'
 #' @return The successful result from \code{\link{call_llm}}, or an error if all retries fail.
@@ -81,22 +142,21 @@ retry_with_backoff <- function(func,
 #'
 #' @examples
 #' \dontrun{
-#'   # Basic usage:
-#'   robust_resp <- call_llm_robust(
-#'     config = my_llm_config,
-#'     messages = list(list(role = "user", content = "Hello, LLM!")),
-#'     tries = 5,
-#'     wait_seconds = 10,
-#'     memoize = FALSE
-#'   )
-#'   cat("Response:", robust_resp, "\n")
+#' robust_resp <- call_llm_robust(
+#' config = llm_config("openai","gpt-4o-mini"),
+#' messages = list(list(role = "user", content = "Hello, LLM!")),
+#' tries = 5,
+#' wait_seconds = 10,
+#' memoize = FALSE
+#' )
+#' print(robust_resp)
+#' as.character(robust_resp)
 #' }
 call_llm_robust <- function(config, messages,
                             tries = 5,
                             wait_seconds = 10,
                             backoff_factor = 5,
                             verbose = FALSE,
-                            json = FALSE,
                             memoize = FALSE) {
 
   # Internal helper that calls either the direct function or the cached variant
@@ -105,9 +165,9 @@ call_llm_robust <- function(config, messages,
       if (!requireNamespace("memoise", quietly = TRUE)) {
         stop("memoize=TRUE requires the 'memoise' package. Please install it (install.packages('memoise')).")
       }
-      return(cache_llm_call(config, messages, verbose = verbose, json = json))
+      return(cache_llm_call(config, messages, verbose = verbose))
     } else {
-      return(call_llm(config, messages, verbose = verbose, json = json))
+      return(call_llm(config, messages, verbose = verbose))
     }
   }
 
@@ -153,7 +213,6 @@ call_llm_robust <- function(config, messages,
 #' @param config An \code{llm_config} object from \code{\link{llm_config}}.
 #' @param messages A list of message objects or character vector for embeddings.
 #' @param verbose Logical. If TRUE, prints the full API response (passed to \code{\link{call_llm}}).
-#' @param json Logical. If TRUE, returns raw JSON (passed to \code{\link{call_llm}}).
 #'
 #' @details
 #' - Requires the \code{memoise} package. Add \code{memoise} to your
@@ -174,11 +233,11 @@ call_llm_robust <- function(config, messages,
 #'   # Subsequent identical calls won't hit the API unless we clear the cache.
 #'   response2 <- cache_llm_call(my_config, list(list(role="user", content="Hello!")))
 #' }
-cache_llm_call <- memoise::memoise(function(config, messages, verbose = FALSE, json = FALSE) {
+cache_llm_call <- memoise::memoise(function(config, messages, verbose = FALSE) {
   if (!requireNamespace("memoise", quietly = TRUE)) {
     stop("Caching with cache_llm_call requires the 'memoise' package. Please install it (install.packages('memoise')).")
   }
-  call_llm(config, messages, verbose = verbose, json = json)
+  call_llm(config, messages, verbose = verbose)
 })
 
 # -------------------------------------------------------------------

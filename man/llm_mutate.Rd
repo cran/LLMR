@@ -7,47 +7,120 @@
 llm_mutate(
   .data,
   output,
-  prompt,
+  prompt = NULL,
+  .messages = NULL,
   .config,
   .system_prompt = NULL,
   .before = NULL,
   .after = NULL,
+  .return = c("columns", "text", "object"),
   ...
 )
 }
 \arguments{
-\item{.data}{A data frame / tibble.}
+\item{.data}{A data.frame / tibble.}
 
-\item{output}{Unquoted name of the new column you want to add.}
+\item{output}{Unquoted name that becomes \strong{the new column} (generative) \emph{or}
+\strong{the prefix} for embedding columns.}
 
-\item{prompt}{A glue template string.
-\emph{If} \code{x} is a data frame, use \code{{col}} placeholders;
-\emph{if} \code{x} is a vector, refer to the element as \code{{x}}.}
+\item{prompt}{Optional glue template string for a single user turn; reference
+any columns in \code{.data} (e.g. \code{"{id}. {question}\\nContext: {context}"}).
+Ignored if \code{.messages} is supplied.}
 
-\item{.config}{An \link{llm_config} object.}
+\item{.messages}{Optional \strong{named} character vector of glue templates to build
+a multi-turn message, using roles in \code{c("system","user","assistant","file")}.
+Values are glue templates evaluated per-row; all can reference multiple columns.
+For multimodal, use role \code{"file"} with a column containing a path template.}
 
-\item{.system_prompt}{Optional system message (character scalar).}
+\item{.config}{An \link{llm_config} object (generative or embedding).}
 
-\item{.before, .after}{Standard \link[dplyr]{mutate} column-placement helpers.}
+\item{.system_prompt}{Optional system message sent with every request when
+\code{.messages} does not include a \code{system} entry.}
 
-\item{...}{Passed unchanged to \link{call_llm_broadcast} (e.g.\ \code{tries},
-\code{progress}, \code{verbose}).}
+\item{.before, .after}{Standard \link[dplyr:relocate]{dplyr::relocate} helpers controlling where the
+generated column(s) are placed.}
+
+\item{.return}{One of \code{c("columns","text","object")}. For generative mode,
+controls how results are added. \code{"columns"} (default) adds text plus
+diagnostic columns; \code{"text"} adds a single text column; \code{"object"} adds a
+list-column of \code{llmr_response} objects.}
+
+\item{...}{Passed to the underlying calls: \code{\link[=call_llm_broadcast]{call_llm_broadcast()}} in
+generative mode, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}} in embedding mode.}
+}
+\value{
+\code{.data} with the new column(s) appended.
 }
 \description{
-A convenience wrapper around \link{llm_fn} that inserts the result as a new
-column via \link[dplyr]{mutate}.
+Adds one or more columns to \code{.data} that are produced by a Large-Language-Model.
 }
 \details{
-Internally calls \code{llm_fn()}, so the API requests inherit the same
-parallel behaviour.  Activate parallelism with
-\code{setup_llm_parallel()} and shut it off with \code{reset_llm_parallel()}.
+\itemize{
+\item \strong{Multi-column injection:} templating is NA-safe (\code{NA} -> empty string).
+\item \strong{Multi-turn templating:} supply \code{.messages = c(system=..., user=..., file=...)}.
+Duplicate role names are allowed (e.g., two \code{user} turns).
+\item \strong{Generative mode:} one request per row via \code{\link[=call_llm_broadcast]{call_llm_broadcast()}}. Parallel
+execution follows the active \strong{future} plan; see \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}.
+\item \strong{Embedding mode:} the per-row text is embedded via \code{\link[=get_batched_embeddings]{get_batched_embeddings()}}.
+Result expands to numeric columns named \verb{paste0(<output>, 1:N)}. If all rows
+fail to embed, a single \verb{<output>1} column of \code{NA} is returned.
+\item Diagnostic columns use suffixes: \verb{_finish}, \verb{_sent}, \verb{_rec}, \verb{_tot}, \verb{_reason}, \verb{_ok}, \verb{_err}, \verb{_id}, \verb{_status}, \verb{_ecode}, \verb{_param}, \verb{_t}.
+}
 }
 \examples{
-## See examples under \link{llm_fn}.
+\dontrun{
+library(dplyr)
+
+df <- tibble::tibble(
+  id       = 1:2,
+  question = c("Capital of France?", "Author of 1984?"),
+  hint     = c("European city", "English novelist")
+)
+
+cfg <- llm_config("openai", "gpt-4o-mini",
+                  temperature = 0)
+
+# Generative: single-turn with multi-column injection
+df |>
+  llm_mutate(
+    answer,
+    prompt = "{question} (hint: {hint})",
+    .config = cfg,
+    .system_prompt = "Respond in one word."
+  )
+
+# Generative: multi-turn via .messages (system + user)
+df |>
+  llm_mutate(
+    advice,
+    .messages = c(
+      system = "You are a helpful zoologist. Keep answers short.",
+      user   = "What is a key fact about this? {question} (hint: {hint})"
+    ),
+    .config = cfg
+  )
+
+# Multimodal: include an image path with role 'file'
+pics <- tibble::tibble(
+  img    = c("inst/extdata/cat.png", "inst/extdata/dog.jpg"),
+  prompt = c("Describe the image.", "Describe the image.")
+)
+pics |>
+  llm_mutate(
+    vision_desc,
+    .messages = c(user = "{prompt}", file = "{img}"),
+    .config = llm_config("openai","gpt-4.1-mini")
+  )
+
+# Embeddings: output name becomes the prefix of embedding columns
+emb_cfg <- llm_config("voyage", "voyage-3.5-lite",
+                      embedding = TRUE)
+df |>
+  llm_mutate(
+    vec,
+    prompt  = "{question}",
+    .config = emb_cfg,
+    .after  = id
+  )
 }
-\seealso{
-\code{\link{setup_llm_parallel}},
-\code{\link{reset_llm_parallel}},
-\code{\link{call_llm_par}},
-\code{\link{llm_fn}}
 }

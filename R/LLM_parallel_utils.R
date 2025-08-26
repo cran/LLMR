@@ -28,10 +28,20 @@
 # Dependencies: future, future.apply, tibble, dplyr, progressr (optional), tidyr (for build_factorial_experiments)
 # -------------------------------------------------------------------
 
+
 # message builder (simple user + optional system) --------------------
 .compose_msg <- function(user, sys = NULL) {
-  if (is.null(sys)) user else c(system = sys, user = user)
+  # NA may be received here instead of NULL;
+  # remove system message if it is missing
+  if (is.null(sys) || (length(sys) == 1L && is.na(sys))) {
+    # no system prompt supplied
+    user
+  } else {
+    c(system = sys, user = user)
+  }
 }
+
+
 
 # Internal helper to unnest config details into columns
 .unnest_config_to_cols <- function(results_df, config_col = "config") {
@@ -58,23 +68,37 @@
   all_model_param_names <- unique(unlist(lapply(results_df[[config_col]], function(cfg) names(cfg$model_params))))
 
   if (length(all_model_param_names) > 0) {
-    param_cols_list <- lapply(all_model_param_names, function(p_name) {
-      sapply(results_df[[config_col]], function(cfg) {
-        val <- cfg$model_params[[p_name]]
-        if (is.null(val)) NA else val
-      })
-    })
-    names(param_cols_list) <- all_model_param_names
-    #params_df <- tibble::as_tibble(param_cols_list)
-    #results_df <- dplyr::bind_cols(results_df, params_df)
 
+    is_scalar_atomic <- function(x) is.atomic(x) && length(x) == 1L
+
+    param_cols_list <- lapply(all_model_param_names, function(p_name) {
+      # collect one value per row (do NOT simplify here)
+      vals <- lapply(results_df[[config_col]], function(cfg) {
+        cfg$model_params[[p_name]] %||% NULL
+      })
+
+      # If every non-NULL is a scalar atomic -> produce a simple atomic column
+      all_scalar <- all(vapply(vals, function(v) is.null(v) || is_scalar_atomic(v), logical(1)))
+
+      if (all_scalar) {
+        # make a vector; keep type simple (character fallback)
+        vapply(vals, function(v) {
+          if (is.null(v)) NA_character_
+          else as.character(v)
+        }, character(1))
+      } else {
+        # keep as list-column (tibble will accept mixed types per row)
+        vals
+      }
+    })
+
+    names(param_cols_list) <- all_model_param_names
     params_df <- tibble::as_tibble(param_cols_list)
     # ------------------------------------------------------------------
     # avoid duplicate names coming from the input tibble
     # ------------------------------------------------------------------
     dup_params <- intersect(names(params_df), names(results_df))
     if (length(dup_params) > 0) {
-      # If both columns exist but differ, keep the one already in results_df
       for (p in dup_params) {
         if (!identical(params_df[[p]], results_df[[p]])) {
           warning(sprintf(
@@ -86,8 +110,8 @@
     }
 
     results_df <- dplyr::bind_cols(results_df, params_df)
-
   }
+
 
   # Identify metadata columns (everything except standard columns)
   meta_cols <- setdiff(names(results_df), c("provider", "model", all_model_param_names,
@@ -142,8 +166,7 @@
 #' @examples
 #' \dontrun{
 #'   # Temperature sweep
-#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
-#'                        api_key = Sys.getenv("OPENAI_API_KEY"))
+#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano")
 #'
 #'   messages <- "What is 15 * 23?"
 #'   temperatures <- c(0, 0.3, 0.7, 1.0, 1.5)
@@ -221,8 +244,7 @@ call_llm_sweep <- function(base_config,
 #' @examples
 #' \dontrun{
 #'   # Broadcast different questions
-#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano",
-#'                        api_key = Sys.getenv("OPENAI_API_KEY"))
+#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano")
 #'
 #'   messages <- list(
 #'     list(list(role = "user", content = "What is 2+2?")),
@@ -297,10 +319,8 @@ call_llm_broadcast <- function(config,
 #' @examples
 #' \dontrun{
 #'   # Compare different models
-#'   config1 <- llm_config(provider = "openai", model = "gpt-4o-mini",
-#'                         api_key = Sys.getenv("OPENAI_API_KEY"))
-#'   config2 <- llm_config(provider = "openai", model = "gpt-4.1-nano",
-#'                         api_key = Sys.getenv("OPENAI_API_KEY"))
+#'   config1 <- llm_config(provider = "openai", model = "gpt-4o-mini")
+#'   config2 <- llm_config(provider = "openai", model = "gpt-4.1-nano")
 #'
 #'   configs_list <- list(config1, config2)
 #'   messages <- "Explain quantum computing"
@@ -363,10 +383,19 @@ call_llm_compare <- function(configs_list,
 #' @param json_output Deprecated. Raw JSON string is always included as raw_response_json.
 #'                  This parameter is kept for backward compatibility but has no effect.
 #'
-#' @return A tibble containing all original columns from experiments (metadata, config, messages),
-#'   plus new columns: response_text, raw_response_json (the raw JSON string from the API),
-#'   success, error_message, duration (in seconds).
+#' @return A tibble containing all original columns plus:
+#' \itemize{
+#'   \item \code{response_text} – assistant text (or \code{NA} on failure)
+#'   \item \code{raw_response_json} – raw JSON string
+#'   \item \code{success}, \code{error_message}
+#'   \item \code{finish_reason} – e.g. "stop", "length", "filter", "tool", or "error:`category`"
+#'   \item \code{sent_tokens}, \code{rec_tokens}, \code{total_tokens}, \code{reasoning_tokens}
+#'   \item \code{response_id}
+#'   \item \code{duration} – seconds
+#'   \item \code{response} – the full \code{llmr_response} object (or \code{NA} on failure)
+#' }
 #'
+#' The `response` column holds `llmr_response` objects on success, or `NULL` on failure.
 
 #' @section Parallel Workflow:
 #' All parallel functions require the `future` backend to be configured.
@@ -384,8 +413,8 @@ call_llm_compare <- function(configs_list,
 #' @examples
 #' \dontrun{
 #' # Simple example: Compare two models on one prompt
-#' cfg1 <- llm_config("openai", "gpt-4.1-nano", Sys.getenv("OPENAI_API_KEY"))
-#' cfg2 <- llm_config("groq", "llama-3.3-70b-versatile", Sys.getenv("GROQ_API_KEY"))
+#' cfg1 <- llm_config("openai", "gpt-4.1-nano")
+#' cfg2 <- llm_config("groq", "llama-3.3-70b-versatile")
 #'
 #' experiments <- tibble::tibble(
 #'   model_id = c("gpt-4.1-nano", "groq-llama-3.3"),
@@ -412,15 +441,14 @@ call_llm_par <- function(experiments,
                          json_output = NULL) {
 
   if (!is.null(json_output) && verbose) {
-    message("Note: The 'json_output' parameter in call_llm_par is deprecated. Raw JSON string is always included as 'raw_response_json'.")
+    message("Note: The 'json_output' parameter is deprecated. Raw JSON is always included as 'raw_response_json'.")
   }
 
-  # Package checks
   if (!requireNamespace("future", quietly = TRUE)) {
-    stop("The 'future' package is required for parallel processing. Please install it with: install.packages('future')")
+    stop("The 'future' package is required. Please install it with: install.packages('future')")
   }
   if (!requireNamespace("future.apply", quietly = TRUE)) {
-    stop("The 'future.apply' package is required for parallel processing. Please install it with: install.packages('future.apply')")
+    stop("The 'future.apply' package is required. Please install it with: install.packages('future.apply')")
   }
   if (progress && !requireNamespace("progressr", quietly = TRUE)) {
     warning("The 'progressr' package is not available. Progress tracking will be disabled.")
@@ -433,7 +461,6 @@ call_llm_par <- function(experiments,
     stop("The 'dplyr' package is required. Please install it with: install.packages('dplyr')")
   }
 
-  # Input validation
   if (!is.data.frame(experiments)) {
     stop("experiments must be a tibble/data.frame")
   }
@@ -443,31 +470,35 @@ call_llm_par <- function(experiments,
   if (nrow(experiments) == 0) {
     warning("No experiments provided. Returning empty input tibble with result columns.")
     return(dplyr::bind_cols(experiments, tibble::tibble(
-      response_text = character(0),
+      response_text     = character(0),
       raw_response_json = character(0),
-      success = logical(0),
-      error_message = character(0)
+      success           = logical(0),
+      error_message     = character(0),
+      finish_reason     = character(0),
+      sent_tokens       = integer(0),
+      rec_tokens        = integer(0),
+      total_tokens      = integer(0),
+      reasoning_tokens  = integer(0),
+      response_id       = character(0),
+      duration          = numeric(0),
+      response          = list(),
+      status_code = integer(0),
+      error_code  = character(0),
+      bad_param   = character(0)
     )))
   }
 
-  # Validate configs
   for (i in seq_len(nrow(experiments))) {
     if (!inherits(experiments$config[[i]], "llm_config")) {
       stop(sprintf("Row %d 'config' is not an llm_config object.", i))
     }
   }
 
-  # Setup workers
   if (is.null(max_workers)) {
     max_workers <- min(future::availableCores(omit = 1L), nrow(experiments))
     max_workers <- max(1, max_workers)
   }
-
   current_plan <- future::plan()
-  if (verbose) {
-    message(sprintf("Setting up parallel execution with %d workers using plan: %s",
-                    max_workers, class(current_plan)[1]))
-  }
   on.exit(future::plan(current_plan), add = TRUE)
   if (!inherits(current_plan, "FutureStrategy") || inherits(current_plan, "sequential")) {
     future::plan(future::multisession, workers = max_workers)
@@ -479,63 +510,109 @@ call_llm_par <- function(experiments,
                     nrow(experiments), n_metadata_cols))
   }
 
-  # Worker function
+  # Helper: pull category from condition class, e.g. "llmr_api_rate_limit_error"
+  .category_from_condition <- function(e) {
+    cls <- class(e)
+    hit <- grep("^llmr_api_(.+)_error$", cls, value = TRUE)
+    if (length(hit)) sub("^llmr_api_(.+)_error$", "\\1", hit[[1]]) else "unknown"
+  }
+
   par_worker <- function(i_val) {
-    start_time <- Sys.time()                 # begin timer
-    current_config <- experiments$config[[i_val]]
+    # small helpers to guarantee column types
+    as_char_or_na <- function(x) {
+      if (is.null(x) || length(x) == 0 || all(is.na(x))) return(NA_character_)
+      as.character(x[[1]])
+    }
+    as_int_or_na <- function(x) {
+      if (is.null(x) || length(x) == 0 || all(is.na(x))) return(NA_integer_)
+      suppressWarnings(as.integer(x[[1]]))
+    }
+
+    start_time <- Sys.time()
+    current_config   <- experiments$config[[i_val]]
     current_messages <- experiments$messages[[i_val]]
     raw_json_str <- NA_character_
 
     tryCatch({
-      # Always call with json=TRUE to get attributes for raw_json
       result_content <- call_llm_robust(
-        config = current_config,
-        messages = current_messages,
-        tries = tries,
-        wait_seconds = wait_seconds,
-        backoff_factor = backoff_factor,
-        verbose = FALSE,
-        json = TRUE, # Force TRUE to get raw_json attribute
-        memoize = memoize
+        config        = current_config,
+        messages      = current_messages,
+        tries         = tries,
+        wait_seconds  = wait_seconds,
+        backoff_factor= backoff_factor,
+        verbose       = FALSE,
+        memoize       = memoize
       )
 
-      # Extract raw JSON from attributes
       raw_json_str <- attr(result_content, "raw_json") %||% NA_character_
 
+      is_obj <- inherits(result_content, "llmr_response")
+      fr  <- if (is_obj) finish_reason(result_content) else NA_character_
+      u   <- if (is_obj) tokens(result_content)        else list(sent=NA, rec=NA, total=NA, reasoning=NA)
+      rid <- if (is_obj) result_content$response_id    else NA_character_
+      dur <- if (is_obj) result_content$duration_s     else as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+
       list(
-        row_index = i_val,
-        response_text = as.character(result_content), # Strip attributes
+        row_index         = i_val,
+        response_text     = as.character(result_content),
         raw_response_json = raw_json_str,
-        success = TRUE,
-        error_message = NA_character_,
-        duration = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        success           = TRUE,
+        error_message     = NA_character_,
+        finish_reason     = fr,
+        sent_tokens       = as_int_or_na(u$sent),
+        rec_tokens        = as_int_or_na(u$rec),
+        total_tokens      = as_int_or_na(u$total),
+        reasoning_tokens  = as_int_or_na(u$reasoning),
+        response_id       = as_char_or_na(rid),
+        duration          = dur,
+        status_code       = NA_integer_,      # <-- force integer
+        error_code        = NA_character_,    # <-- force character
+        bad_param         = NA_character_,    # <-- force character
+        response          = list(if (is_obj) result_content else NULL)
       )
+
     }, error = function(e) {
+      # pull fields, then coerce types explicitly
+      sc0  <- tryCatch(e$status_code, error = function(...) NA)
+      rid0 <- tryCatch(e$request_id,  error = function(...) NA)
+      prm0 <- tryCatch(e$param,       error = function(...) NA)
+      cod0 <- tryCatch(e$code,        error = function(...) NA)
+
       list(
-        row_index = i_val,
-        response_text = NA_character_,
+        row_index         = i_val,
+        response_text     = NA_character_,
         raw_response_json = raw_json_str,
-        success = FALSE,
-        error_message = conditionMessage(e),
-        duration = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+        success           = FALSE,
+        error_message     = conditionMessage(e),
+        finish_reason     = paste0("error:", {
+          cls <- class(e)
+          hit <- grep("^llmr_api_(.+)_error$", cls, value = TRUE)
+          if (length(hit)) sub("^llmr_api_(.+)_error$", "\\1", hit[[1]]) else "unknown"
+        }),
+        sent_tokens       = NA_integer_,
+        rec_tokens        = NA_integer_,
+        total_tokens      = NA_integer_,
+        reasoning_tokens  = NA_integer_,
+        response_id       = as_char_or_na(rid0),   # character
+        duration          = as.numeric(difftime(Sys.time(), start_time, units = "secs")),
+        status_code       = as_int_or_na(sc0),     # integer
+        error_code        = as_char_or_na(cod0),   # character (prevents int/char clash)
+        bad_param         = as_char_or_na(prm0),   # character
+        response          = list(NULL)
       )
     })
   }
 
-  # Execute in parallel
+
   if (progress) {
     progressr::with_progress({
       p <- progressr::progressor(steps = nrow(experiments))
       api_call_results_list <- future.apply::future_lapply(
         seq_len(nrow(experiments)),
-        function(k) {
-          res <- par_worker(k)
-          p()
-          res
-        },
+        function(k) { res <- par_worker(k); p(); res },
         future.seed = TRUE,
         future.packages = "LLMR",
-        future.globals = TRUE
+        future.globals  = TRUE
       )
     })
   } else {
@@ -544,31 +621,58 @@ call_llm_par <- function(experiments,
       par_worker,
       future.seed = TRUE,
       future.packages = "LLMR",
-      future.globals = TRUE
+      future.globals  = TRUE
     )
   }
 
-  # Convert results to dataframe
   api_results_df <- dplyr::bind_rows(api_call_results_list)
 
-  # Prepare output with all original columns plus results
   output_df <- experiments
-  output_df$response_text <- NA_character_
-  output_df$raw_response_json <- NA_character_
-  output_df$success <- NA
-  output_df$error_message <- NA_character_
-  output_df$duration   <- NA_real_
+  # --- Robust column handling to prevent overwriting user data ---
+  new_cols_spec <- list(
+    response_text     = NA_character_,
+    raw_response_json = NA_character_,
+    success           = NA,
+    error_message     = NA_character_,
+    finish_reason     = NA_character_,
+    sent_tokens       = NA_integer_,
+    rec_tokens        = NA_integer_,
+    total_tokens      = NA_integer_,
+    reasoning_tokens  = NA_integer_,
+    response_id       = NA_character_,
+    duration          = NA_real_,
+    status_code       = NA_integer_,
+    error_code        = NA_character_,
+    bad_param         = NA_character_,
+    response          = vector("list", nrow(experiments))
+  )
+  existing_names <- names(output_df)
+  final_col_names <- stats::setNames(as.list(names(new_cols_spec)), names(new_cols_spec))
+  for (col_name in names(new_cols_spec)) {
+    final_name <- col_name
+    suffix <- 1
+    while (final_name %in% existing_names) {
+      final_name <- paste0(col_name, ".", suffix)
+      suffix <- suffix + 1
+    }
+    if (final_name != col_name && verbose) {
+      warning(sprintf("Input data already has a column named '%s'. Results will be in '%s'.", col_name, final_name))
+    }
+    output_df[[final_name]] <- new_cols_spec[[col_name]]
+    final_col_names[[col_name]] <- final_name
+    existing_names <- c(existing_names, final_name)
+  }
 
-
-  # Fill in results by row index
-  output_df$response_text[api_results_df$row_index] <- as.character(api_results_df$response_text)
-  output_df$raw_response_json[api_results_df$row_index] <- as.character(api_results_df$raw_response_json)
-  output_df$success[api_results_df$row_index] <- as.logical(api_results_df$success)
-  output_df$error_message[api_results_df$row_index] <- as.character(api_results_df$error_message)
-  output_df$duration  [api_results_df$row_index] <- as.numeric(api_results_df$duration)
+  # Fill by row index
+  idx <- api_results_df$row_index
+  for (original_name in names(final_col_names)) {
+    final_name <- final_col_names[[original_name]]
+    output_df[[final_name]][idx] <- api_results_df[[original_name]]
+  }
 
   if (verbose) {
-    successful_calls <- sum(output_df$success, na.rm = TRUE)
+    succ_col <- final_col_names$success
+    successful_calls <- sum(output_df[[succ_col]], na.rm = TRUE)
     message(sprintf("Parallel processing completed: %d/%d experiments successful",
                     successful_calls, nrow(output_df)))
   }
@@ -576,8 +680,7 @@ call_llm_par <- function(experiments,
   if (simplify) {
     output_df <- .unnest_config_to_cols(output_df, config_col = "config")
   }
-
-  return(output_df)
+  if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(output_df) else output_df
 }
 
 #' Build Factorial Experiment Design
@@ -590,8 +693,7 @@ call_llm_par <- function(experiments,
 #' @param config_labels Character vector of labels for configs. If NULL, uses "provider_model".
 #' @param user_prompts Character vector (or list) of user‑turn prompts.
 #' @param user_prompt_labels Optional labels for the user prompts.
-#' @param system_prompts  Optional character vector of system messages
-#'                        (recycled against user_prompts).
+#' @param system_prompts Optional character vector of system messages (recycled against user prompts). Missing/NA values are ignored; messages are user-only.
 #' @param system_prompt_labels Optional labels for the system prompts.
 #'
 #' @return A tibble with columns: config (list-column), messages (list-column),
@@ -722,7 +824,7 @@ build_factorial_experiments <- function(configs,
 #' @examples
 #' \dontrun{
 #'   # Automatic setup
-#'   old_plan <- setup_llm_parallel()
+#'   setup_llm_parallel()
 #'
 #'   # Manual setup with specific workers
 #'   setup_llm_parallel(workers = 4, verbose = TRUE)
@@ -731,7 +833,7 @@ build_factorial_experiments <- function(configs,
 #'   setup_llm_parallel(strategy = "sequential")
 #'
 #'   # Restore old plan if needed
-#'   future::plan(old_plan)
+#'   reset_llm_parallel()
 #' }
 setup_llm_parallel <- function(strategy = NULL, workers = NULL, verbose = FALSE) {
 
