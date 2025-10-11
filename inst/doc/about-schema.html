@@ -379,7 +379,7 @@ No global “JSON mode.” Instead, you <strong>define a tool</strong> with
 an <strong><code>input_schema</code></strong> (JSON Schema) and
 <strong>force</strong> it via <code>tool_choice</code>, so the model
 must return a JSON object that validates the schema.<br />
-See <a href="https://docs.anthropic.com/en/api/messages#tools">Anthropic
+See <a href="https://docs.claude.com/en/api/messages#tools">Anthropic
 Messages API: tools &amp; <code>input_schema</code></a></p></li>
 <li><p><strong>Google Gemini (REST)</strong><br />
 Set <code>responseMimeType = &quot;application/json&quot;</code> in
@@ -460,7 +460,7 @@ providers)</h3>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR)</span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>    <span class="at">provider =</span> <span class="st">&quot;openai&quot;</span>,                <span class="co"># try &quot;groq&quot; or &quot;together&quot; too</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;gpt-4o-mini&quot;</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;gpt-4.1-nano&quot;</span>,</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>    <span class="at">temperature =</span> <span class="dv">0</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  )</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a></span>
@@ -472,16 +472,7 @@ providers)</h3>
 <span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a></span>
 <span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">&quot;Raw text:</span><span class="sc">\n</span><span class="st">&quot;</span>, <span class="fu">as.character</span>(res), <span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">&quot;</span>)</span>
 <span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>  <span class="fu">str</span>(parsed)</span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>})</span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; Raw text:</span></span>
-<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt;  {</span></span>
-<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt;   &quot;ok&quot;: true,</span></span>
-<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt;   &quot;n&quot;: 3</span></span>
-<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; } </span></span>
-<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt; List of 2</span></span>
-<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt;  $ ok: logi TRUE</span></span>
-<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt;  $ n : num 3</span></span></code></pre></div>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>})</span></code></pre></div>
 <p><strong>What could still fail?</strong> Proxies labeled
 “OpenAI-compatible” sometimes accept <code>response_format</code> but
 don’t strictly enforce it; LLMR’s parser recovers from fences or
@@ -528,33 +519,13 @@ and (notably) expects <strong>all properties to be listed under
 <span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a>  )</span>
 <span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a></span>
 <span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a>  out <span class="sc">%&gt;%</span> <span class="fu">select</span>(structured_ok, structured_valid, title, year, tags) <span class="sc">%&gt;%</span> <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span>
-<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a>})</span>
-<span id="cb4-35"><a href="#cb4-35" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-36"><a href="#cb4-36" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;dplyr&#39;</span></span>
-<span id="cb4-37"><a href="#cb4-37" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:stats&#39;:</span></span>
-<span id="cb4-38"><a href="#cb4-38" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-39"><a href="#cb4-39" tabindex="-1"></a><span class="co">#&gt;     filter, lag</span></span>
-<span id="cb4-40"><a href="#cb4-40" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
-<span id="cb4-41"><a href="#cb4-41" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-42"><a href="#cb4-42" tabindex="-1"></a><span class="co">#&gt;     intersect, setdiff, setequal, union</span></span>
-<span id="cb4-43"><a href="#cb4-43" tabindex="-1"></a><span class="co">#&gt; [2025-08-26 01:02:36.347837] LLMR Error: LLM API request failed.</span></span>
-<span id="cb4-44"><a href="#cb4-44" tabindex="-1"></a><span class="co">#&gt; HTTP status: 404</span></span>
-<span id="cb4-45"><a href="#cb4-45" tabindex="-1"></a><span class="co">#&gt; Reason: The model `qwen-2.5-72b-instruct` does not exist or you do not have access to it.</span></span>
-<span id="cb4-46"><a href="#cb4-46" tabindex="-1"></a><span class="co">#&gt; Tip: check model params for provider/API version.</span></span>
-<span id="cb4-47"><a href="#cb4-47" tabindex="-1"></a><span class="co">#&gt; [2025-08-26 01:02:36.346521] LLMR Error: LLM API request failed.</span></span>
-<span id="cb4-48"><a href="#cb4-48" tabindex="-1"></a><span class="co">#&gt; HTTP status: 404</span></span>
-<span id="cb4-49"><a href="#cb4-49" tabindex="-1"></a><span class="co">#&gt; Reason: The model `qwen-2.5-72b-instruct` does not exist or you do not have access to it.</span></span>
-<span id="cb4-50"><a href="#cb4-50" tabindex="-1"></a><span class="co">#&gt; Tip: check model params for provider/API version.</span></span>
-<span id="cb4-51"><a href="#cb4-51" tabindex="-1"></a><span class="co">#&gt; # A tibble: 2 × 5</span></span>
-<span id="cb4-52"><a href="#cb4-52" tabindex="-1"></a><span class="co">#&gt;   structured_ok structured_valid title year  tags </span></span>
-<span id="cb4-53"><a href="#cb4-53" tabindex="-1"></a><span class="co">#&gt;   &lt;lgl&gt;         &lt;lgl&gt;            &lt;chr&gt; &lt;chr&gt; &lt;chr&gt;</span></span>
-<span id="cb4-54"><a href="#cb4-54" tabindex="-1"></a><span class="co">#&gt; 1 FALSE         FALSE            &lt;NA&gt;  &lt;NA&gt;  &lt;NA&gt; </span></span>
-<span id="cb4-55"><a href="#cb4-55" tabindex="-1"></a><span class="co">#&gt; 2 FALSE         FALSE            &lt;NA&gt;  &lt;NA&gt;  &lt;NA&gt;</span></span></code></pre></div>
+<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a>})</span></code></pre></div>
 <p>If your key is set, you should see <code>structured_ok = TRUE</code>,
-<code>structured_valid = TRUE</code>, plus parsed columns. <em>(Tip: if
-you see a 400 complaining about <code>required</code>, add
-<strong>all</strong> properties to <code>required</code>, as
-above.)</em></p>
+<code>structured_valid = TRUE</code>, plus parsed columns.</p>
+<p><strong>Common gotcha</strong>: If Groq returns a 400 error
+complaining about <code>required</code>, ensure <strong>all
+properties</strong> are listed in the <code>required</code> array.
+Groq’s structured output implementation is stricter than OpenAI’s.</p>
 <hr />
 </div>
 <div id="anthropic-force-a-schema-via-a-tool-may-require-max_tokens" class="section level3">
@@ -569,7 +540,7 @@ above.)</em></p>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>    <span class="at">additionalProperties=</span><span class="cn">FALSE</span></span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  )</span>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>,<span class="st">&quot;claude-3-7&quot;</span>, <span class="at">temperature =</span> <span class="dv">0</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>,<span class="st">&quot;claude-3-5-haiku-latest&quot;</span>, <span class="at">temperature =</span> <span class="dv">0</span>)</span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema, <span class="at">name =</span> <span class="st">&quot;llmr_schema&quot;</span>)</span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a></span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  res <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="fu">c</span>(</span>
@@ -579,14 +550,7 @@ above.)</em></p>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a></span>
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>  parsed <span class="ot">&lt;-</span> <span class="fu">llm_parse_structured</span>(res)</span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>  <span class="fu">str</span>(parsed)</span>
-<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>})</span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; Warning in call_llm.anthropic(cfg, c(system = &quot;Return only the tool result that</span></span>
-<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; matches the schema.&quot;, : Anthropic requires max_tokens; setting it at 2048.</span></span>
-<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt; ERROR: LLM API request failed.</span></span>
-<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt; HTTP status: 404</span></span>
-<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt; Reason: model: claude-3-7</span></span>
-<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt; Tip: check model params for provider/API version.</span></span>
-<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; NULL</span></span></code></pre></div>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>})</span></code></pre></div>
 <blockquote>
 <p>Anthropic <em>requires</em> <code>max_tokens</code>; LLMR warns and
 defaults if you omit it.</p>
@@ -600,7 +564,7 @@ models)</h3>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR)</span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a></span>
 <span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="st">&quot;gemini&quot;</span>, <span class="st">&quot;gemini-2.0-flash&quot;</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="st">&quot;gemini&quot;</span>, <span class="st">&quot;gemini-2.5-flash-lite&quot;</span>,</span>
 <span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>    <span class="at">response_mime_type =</span> <span class="st">&quot;application/json&quot;</span>  <span class="co"># ask for JSON back</span></span>
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>    <span class="co"># Optionally: gemini_enable_response_schema = TRUE, response_schema = &lt;your JSON Schema&gt;</span></span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  )</span>
@@ -610,11 +574,7 @@ models)</h3>
 <span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>    <span class="at">user   =</span> <span class="st">&quot;Produce fields name and score about &#39;MNIST&#39;.&quot;</span></span>
 <span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>  ))</span>
 <span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>  <span class="fu">str</span>(<span class="fu">llm_parse_structured</span>(res))</span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>})</span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; List of 1</span></span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;  $ :List of 2</span></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt;   ..$ name : chr &quot;MNIST&quot;</span></span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;   ..$ score: chr &quot;99.6&quot;</span></span></code></pre></div>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>})</span></code></pre></div>
 <hr />
 </div>
 </div>
@@ -634,17 +594,38 @@ models)</h3>
 <span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>      <span class="at">fields =</span> <span class="fu">c</span>(<span class="at">x =</span> <span class="st">&quot;x&quot;</span>, <span class="at">y =</span> <span class="st">&quot;/y/0&quot;</span>)   <span class="co"># dot/bracket or JSON Pointer</span></span>
 <span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>    ) <span class="sc">|&gt;</span></span>
 <span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>})</span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 5</span></span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt;   response_text                        structured_ok structured_data     x     y</span></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;                                &lt;lgl&gt;         &lt;list&gt;          &lt;dbl&gt; &lt;dbl&gt;</span></span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; 1 &quot;```json\n{\&quot;x\&quot;: 1, \&quot;y\&quot;: [1,2,3]… TRUE          &lt;named list&gt;        1     1</span></span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; 2 &quot;Sure! Here is JSON: {\&quot;x\&quot;:\&quot;1\&quot;,\… TRUE          &lt;named list&gt;        1    NA</span></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; 3 &quot;{\&quot;x\&quot;:1, \&quot;y\&quot;:[2,3,4]}&quot;           TRUE          &lt;named list&gt;        1     2</span></span></code></pre></div>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>})</span></code></pre></div>
 <p><strong>Why this helps</strong> Works when outputs arrive fenced,
 with pre/post text, or when arrays sneak in. Non-scalars become
 list-columns (set <code>allow_list = FALSE</code> to force scalars
 only).</p>
+<hr />
+</div>
+<div id="pro-tip-combine-with-parallel-execution" class="section level2">
+<h2>Pro tip: Combine with parallel execution</h2>
+<p>For production ETL workflows, combine schema validation with
+parallelization:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">library</span>(LLMR); <span class="fu">library</span>(dplyr)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>cfg_with_schema <span class="ot">=</span> <span class="fu">llm_config</span>(<span class="st">&#39;openai&#39;</span>,<span class="st">&#39;gpt-4.1-nano&#39;</span>)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  </span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="fu">setup_llm_parallel</span>(<span class="at">workers =</span> <span class="dv">10</span>)</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="do">### Assuming there is a large data frame large_df</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>large_df <span class="sc">|&gt;</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  <span class="fu">llm_mutate_structured</span>(</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>    result,</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>    <span class="at">prompt =</span> <span class="st">&quot;Extract: {text}&quot;</span>,</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>    <span class="at">.config =</span> cfg_with_schema,</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>    <span class="at">.schema =</span> schema,</span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>    <span class="at">.fields =</span> <span class="fu">c</span>(<span class="st">&quot;label&quot;</span>, <span class="st">&quot;score&quot;</span>),</span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>    <span class="at">tries =</span> <span class="dv">3</span>  <span class="co"># auto-retry failures</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>  )</span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="fu">reset_llm_parallel</span>()</span></code></pre></div>
+<p>This processes thousands of rows efficiently with automatic retries
+and validation.</p>
 <hr />
 </div>
 <div id="choosing-the-mode" class="section level2">
@@ -668,7 +649,7 @@ with <code>enable_structured_output()</code> and run
 <li>Together: Structured Output: <a href="https://docs.together.ai/docs/json-mode">https://docs.together.ai/docs/json-mode</a></li>
 <li>x.ai: Structured Output: <a href="https://docs.x.ai/docs/guides/structured-outputs">https://docs.x.ai/docs/guides/structured-outputs</a></li>
 <li>DeepSeek: JSON Mode: <a href="https://api-docs.deepseek.com/guides/json_mode">https://api-docs.deepseek.com/guides/json_mode</a></li>
-<li>Anthropic: Messages API, tools &amp; <code>input_schema</code>: <a href="https://docs.anthropic.com/en/api/messages#body-tool-choice">https://docs.anthropic.com/en/api/messages#body-tool-choice</a></li>
+<li>Anthropic: Messages API, tools &amp; <code>input_schema</code>: <a href="https://docs.claude.com/en/api/messages#body-tool-choice">https://docs.claude.com/en/api/messages#body-tool-choice</a></li>
 <li>Google Gemini: Structured Output: <a href="https://ai.google.dev/gemini-api/docs/structured-output">https://ai.google.dev/gemini-api/docs/structured-output</a></li>
 </ul>
 </div>

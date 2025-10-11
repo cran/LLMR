@@ -18,7 +18,7 @@ llm_config(
 \arguments{
 \item{provider}{Character scalar. One of:
 \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"groq"}, \code{"together"},
-\code{"voyage"} (embeddings only), \code{"deepseek"}, \code{"xai"}.}
+\code{"voyage"} (embeddings only), \code{"deepseek"}, \code{"xai"}, \code{"ollama"}.}
 
 \item{model}{Character scalar. Model name understood by the chosen provider.
 (e.g., \code{"gpt-4o-mini"}, \code{"o4-mini"}, \code{"claude-3.7"}, \code{"gemini-2.0-flash"}, etc.)}
@@ -42,7 +42,10 @@ after a server hint; see \code{call_llm()} notes).}
 
 \item{...}{Additional provider-specific parameters (e.g., \code{temperature},
 \code{top_p}, \code{max_tokens}, \code{top_k}, \code{repetition_penalty}, \code{reasoning_effort},
-\code{api_url}, etc.). Values are forwarded verbatim unless documented shims apply.}
+\code{api_url}, etc.). Values are forwarded verbatim unless documented shims apply.
+For Anthropic extended thinking, supply \code{thinking_budget} (canonical;
+mapped to \code{thinking.budget_tokens}) together with \code{include_thoughts = TRUE}
+to request the thinking block in the response.}
 }
 \value{
 An object of class \code{c("llm_config", provider)}. Fields:

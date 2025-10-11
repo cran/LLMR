@@ -343,6 +343,18 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>knitr<span class="sc">::</span>opts_chunk<span class="sc">$</span><span class="fu">set</span>(</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) )</span></code></pre></div>
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p>This vignette demonstrates:</p>
+<ol style="list-style-type: decimal">
+<li>Building factorial experiment designs with
+<code>build_factorial_experiments()</code></li>
+<li>Running experiments in parallel with
+<code>call_llm_par()</code></li>
+<li>Comparing unstructured vs. structured output across providers</li>
+</ol>
+<p>The workflow is: <strong>design → parallel execution →
+analysis</strong></p>
 <p>We will compare three configurations on two prompts, once
 unstructured and once with structured output. In choosing models, note
 that at the time of writing this vignette, Gemini models are not
@@ -353,6 +365,7 @@ trouble.</p>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_openai <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;openai&quot;</span>,   <span class="st">&quot;gpt-5-nano&quot;</span>)</span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>cfg_cld    <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>,<span class="st">&quot;claude-sonnet-4-20250514&quot;</span>, <span class="at">max_tokens =</span> <span class="dv">512</span>)</span>
 <span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>cfg_gem    <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>,     <span class="st">&quot;openai/gpt-oss-20b&quot;</span>)</span></code></pre></div>
+</div>
 <div id="build-a-factorial-design" class="section level2">
 <h2>Build a factorial design</h2>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>experiments <span class="ot">&lt;-</span> <span class="fu">build_factorial_experiments</span>(</span>
@@ -361,43 +374,27 @@ trouble.</p>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>                    <span class="st">&quot;List two benefits of green tea.&quot;</span>),</span>
 <span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">system_prompts =</span> <span class="fu">c</span>(<span class="st">&quot;Be concise.&quot;</span>)</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>)</span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>experiments</span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt; # A tibble: 6 × 6</span></span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt;   config     messages  config_label        user_prompt_label system_prompt_label</span></span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt;   &lt;list&gt;     &lt;list&gt;    &lt;chr&gt;               &lt;chr&gt;             &lt;chr&gt;              </span></span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; 1 &lt;llm_cnfg&gt; &lt;chr [2]&gt; openai_gpt-5-nano   user_1            system_1           </span></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; 2 &lt;llm_cnfg&gt; &lt;chr [2]&gt; openai_gpt-5-nano   user_2            system_1           </span></span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; 3 &lt;llm_cnfg&gt; &lt;chr [2]&gt; anthropic_claude-s… user_1            system_1           </span></span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; 4 &lt;llm_cnfg&gt; &lt;chr [2]&gt; anthropic_claude-s… user_2            system_1           </span></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; 5 &lt;llm_cnfg&gt; &lt;chr [2]&gt; groq_openai/gpt-os… user_1            system_1           </span></span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; 6 &lt;llm_cnfg&gt; &lt;chr [2]&gt; groq_openai/gpt-os… user_2            system_1           </span></span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; # ℹ 1 more variable: repetition &lt;int&gt;</span></span></code></pre></div>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>experiments</span></code></pre></div>
 </div>
 <div id="run-unstructured" class="section level2">
 <h2>Run unstructured</h2>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">setup_llm_parallel</span>(<span class="at">workers =</span> <span class="dv">10</span>)</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>res_unstructured <span class="ot">&lt;-</span> <span class="fu">call_llm_par</span>(experiments, <span class="at">progress =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; [2025-08-26 01:03:04.059187] LLMR Error: LLM API request failed.</span></span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; HTTP status: 529</span></span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; Reason: Overloaded</span></span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; Tip: check model params for provider/API version.</span></span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; [2025-08-26 01:03:04.243258] LLMR Error: LLM API request failed.</span></span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; HTTP status: 529</span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; Reason: Overloaded</span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; Tip: check model params for provider/API version.</span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="fu">reset_llm_parallel</span>()</span>
-<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a>res_unstructured <span class="sc">|&gt;</span></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>  <span class="fu">select</span>(provider, model, user_prompt_label, response_text, finish_reason) <span class="sc">|&gt;</span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a>  <span class="fu">head</span>()</span>
-<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; # A tibble: 6 × 5</span></span>
-<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt;   provider  model                  user_prompt_label response_text finish_reason</span></span>
-<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;     &lt;chr&gt;                  &lt;chr&gt;             &lt;chr&gt;         &lt;chr&gt;        </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt; 1 openai    gpt-5-nano             user_1            &quot;NASA&#39;s Apol… stop         </span></span>
-<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt; 2 openai    gpt-5-nano             user_2            &quot;- Rich in a… stop         </span></span>
-<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt; 3 anthropic claude-sonnet-4-20250… user_1             &lt;NA&gt;         error:server </span></span>
-<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt; 4 anthropic claude-sonnet-4-20250… user_2             &lt;NA&gt;         error:server </span></span>
-<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; 5 groq      openai/gpt-oss-20b     user_1            &quot;The Apollo … stop         </span></span>
-<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a><span class="co">#&gt; 6 groq      openai/gpt-oss-20b     user_2            &quot;- **Rich in… stop</span></span></code></pre></div>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">reset_llm_parallel</span>()</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>res_unstructured <span class="sc">|&gt;</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="fu">select</span>(provider, model, user_prompt_label, response_text, finish_reason) <span class="sc">|&gt;</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="fu">head</span>()</span></code></pre></div>
+<p><strong>Understanding the results:</strong></p>
+<p>The <code>finish_reason</code> column shows why each response
+ended:</p>
+<ul>
+<li><code>&quot;stop&quot;</code>: normal completion</li>
+<li><code>&quot;length&quot;</code>: hit token limit (increase
+<code>max_tokens</code>)</li>
+<li><code>&quot;filter&quot;</code>: content filter triggered</li>
+</ul>
+<p>The <code>user_prompt_label</code> helps track which experimental
+condition produced each response.</p>
 </div>
 <div id="structured-version" class="section level2">
 <h2>Structured version</h2>
@@ -420,16 +417,7 @@ trouble.</p>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a></span>
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>res_structured <span class="sc">|&gt;</span></span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>  <span class="fu">select</span>(provider, model, user_prompt_label, structured_ok, answer) <span class="sc">|&gt;</span></span>
-<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>  <span class="fu">head</span>()</span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; # A tibble: 6 × 5</span></span>
-<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt;   provider  model                    user_prompt_label structured_ok answer     </span></span>
-<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;     &lt;chr&gt;                    &lt;chr&gt;             &lt;lgl&gt;         &lt;chr&gt;      </span></span>
-<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt; 1 openai    gpt-5-nano               user_1            TRUE          &quot;The Apoll…</span></span>
-<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt; 2 openai    gpt-5-nano               user_2            TRUE          &quot;1) Rich i…</span></span>
-<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt; 3 anthropic claude-sonnet-4-20250514 user_1            TRUE          &quot;The Apoll…</span></span>
-<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; 4 anthropic claude-sonnet-4-20250514 user_2            TRUE          &quot;Green tea…</span></span>
-<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt; 5 groq      openai/gpt-oss-20b       user_1            TRUE          &quot;The Apoll…</span></span>
-<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt; 6 groq      openai/gpt-oss-20b       user_2            TRUE          &quot;Green tea…</span></span></code></pre></div>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>  <span class="fu">head</span>()</span></code></pre></div>
 </div>
 
 

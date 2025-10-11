@@ -344,7 +344,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
-<p>We’ll show both unstructured and structured pipelines, using four
+<p>We will show both unstructured and structured pipelines, using four
 model names: - gpt-5-nano (OpenAI) - claude-sonnet-4-20250514
 (Anthropic) - gemini-2.5-flash (Gemini) - openai/gpt-oss-20b (Groq)</p>
 <p>You will need environment variables OPENAI_API_KEY,
@@ -365,16 +365,7 @@ ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
 <span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">.config =</span> cfg_openai,</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">.return =</span> <span class="st">&quot;columns&quot;</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>)</span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>out</span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 14</span></span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt;   response_text finish_reason sent_tokens rec_tokens total_tokens</span></span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;         &lt;chr&gt;               &lt;int&gt;      &lt;int&gt;        &lt;int&gt;</span></span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; 1 Positive      stop                   19        138          157</span></span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; 2 Negative.     stop                   20        204          224</span></span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; 3 Neutral       stop                   19        266          285</span></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; # ℹ 9 more variables: reasoning_tokens &lt;int&gt;, success &lt;lgl&gt;,</span></span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; #   error_message &lt;chr&gt;, status_code &lt;int&gt;, error_code &lt;chr&gt;, bad_param &lt;chr&gt;,</span></span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; #   response_id &lt;chr&gt;, duration &lt;dbl&gt;, raw_response_json &lt;chr&gt;</span></span></code></pre></div>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>out</span></code></pre></div>
 </div>
 <div id="llm_fn-unstructured-groq" class="section level2">
 <h2>llm_fn: unstructured (Groq)</h2>
@@ -384,16 +375,7 @@ ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
 <span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">.config =</span> cfg_groq,</span>
 <span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">.return =</span> <span class="st">&quot;columns&quot;</span></span>
 <span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>out_groq</span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 14</span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt;   response_text finish_reason sent_tokens rec_tokens total_tokens</span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;         &lt;chr&gt;               &lt;int&gt;      &lt;int&gt;        &lt;int&gt;</span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; 1 Positive      stop                   84         50          134</span></span>
-<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt; 2 Negative      stop                   85         89          174</span></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; 3 Positive      stop                   84        103          187</span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt; # ℹ 9 more variables: reasoning_tokens &lt;int&gt;, success &lt;lgl&gt;,</span></span>
-<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; #   error_message &lt;chr&gt;, status_code &lt;int&gt;, error_code &lt;chr&gt;, bad_param &lt;chr&gt;,</span></span>
-<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; #   response_id &lt;chr&gt;, duration &lt;dbl&gt;, raw_response_json &lt;chr&gt;</span></span></code></pre></div>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>out_groq</span></code></pre></div>
 </div>
 <div id="llm_fn_structured-schema-first-openai" class="section level2">
 <h2>llm_fn_structured: schema-first (OpenAI)</h2>
@@ -414,18 +396,7 @@ ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
 <span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>  <span class="at">.schema =</span> schema,</span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>  <span class="at">.fields =</span> <span class="fu">c</span>(<span class="st">&quot;label&quot;</span>, <span class="st">&quot;score&quot;</span>)</span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a>)</span>
-<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>out_s</span>
-<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 20</span></span>
-<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt;   response_text                finish_reason sent_tokens rec_tokens total_tokens</span></span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;                        &lt;chr&gt;               &lt;int&gt;      &lt;int&gt;        &lt;int&gt;</span></span>
-<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; 1 &quot;{\&quot;label\&quot;:\&quot;Positive\&quot;,\&quot;… stop                   69        409          478</span></span>
-<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="co">#&gt; 2 &quot;{\&quot;label\&quot;:\&quot;Negative\&quot;,\&quot;… stop                   70        410          480</span></span>
-<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="co">#&gt; 3 &quot;{\&quot;label\&quot;:\&quot;Neutral\&quot;,\&quot;s… stop                   69        473          542</span></span>
-<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="co">#&gt; # ℹ 15 more variables: reasoning_tokens &lt;int&gt;, success &lt;lgl&gt;,</span></span>
-<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="co">#&gt; #   error_message &lt;chr&gt;, status_code &lt;int&gt;, error_code &lt;chr&gt;, bad_param &lt;chr&gt;,</span></span>
-<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; #   response_id &lt;chr&gt;, duration &lt;dbl&gt;, raw_response_json &lt;chr&gt;,</span></span>
-<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="co">#&gt; #   structured_ok &lt;lgl&gt;, structured_data &lt;list&gt;, label &lt;chr&gt;, score &lt;dbl&gt;,</span></span>
-<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="co">#&gt; #   structured_valid &lt;lgl&gt;, structured_error &lt;chr&gt;</span></span></code></pre></div>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>out_s</span></code></pre></div>
 </div>
 <div id="llm_mutate-unstructured-anthropic" class="section level2">
 <h2>llm_mutate: unstructured (Anthropic)</h2>
@@ -436,56 +407,89 @@ ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
 <span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a></span>
 <span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>df_u <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span></span>
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>    answer,</span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>    <span class="at">prompt  =</span> <span class="st">&quot;Give a short category for: {text}&quot;</span>,</span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>    <span class="at">.config =</span> cfg_cld,</span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>    <span class="at">.return =</span> <span class="st">&quot;columns&quot;</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  )</span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a></span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>df_u</span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 15</span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt;   answer answer_finish answer_sent answer_rec answer_tot answer_reason answer_ok</span></span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;  &lt;chr&gt;               &lt;int&gt;      &lt;int&gt;      &lt;int&gt;         &lt;int&gt; &lt;lgl&gt;    </span></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt; 1 **Pet… stop                   18         14         32            NA TRUE     </span></span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt; 2 **Wea… stop                   17         14         31            NA TRUE     </span></span>
-<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt; 3 **Bev… stop                   16         10         26            NA TRUE     </span></span>
-<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt; # ℹ 8 more variables: answer_err &lt;chr&gt;, answer_id &lt;chr&gt;, answer_status &lt;int&gt;,</span></span>
-<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt; #   answer_ecode &lt;chr&gt;, answer_param &lt;chr&gt;, answer_t &lt;dbl&gt;, id &lt;int&gt;,</span></span>
-<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="co">#&gt; #   text &lt;chr&gt;</span></span></code></pre></div>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>    <span class="at">answer  =</span> <span class="st">&quot;Give a short category for: {text}&quot;</span>,</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>    <span class="at">.config =</span> cfg_cld,</span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>    <span class="at">.return =</span> <span class="st">&quot;columns&quot;</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>  )</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>df_u</span></code></pre></div>
 </div>
-<div id="llm_mutate_structured-structured-gemini" class="section level2">
-<h2>llm_mutate_structured: structured (Gemini)</h2>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>schema2 <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>    <span class="at">category  =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>    <span class="at">rationale =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>)</span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  ),</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;category&quot;</span>, <span class="st">&quot;rationale&quot;</span>),</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>)</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>df_s <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  <span class="fu">llm_mutate_structured</span>(</span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>    annot,</span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>    <span class="at">prompt  =</span> <span class="st">&quot;Extract category and a one-sentence rationale for: {text}&quot;</span>,</span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    <span class="at">.config =</span> cfg_gemini,</span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>    <span class="at">.schema =</span> schema2</span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>    <span class="co"># Because a schema is present, fields auto-hoist; you can also pass:</span></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>    <span class="co"># .fields = c(&quot;category&quot;, &quot;rationale&quot;)</span></span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>  )</span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>df_s</span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt; # A tibble: 3 × 19</span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt;   annot        annot_finish annot_sent annot_rec annot_tot annot_reason annot_ok</span></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;        &lt;chr&gt;             &lt;int&gt;     &lt;int&gt;     &lt;int&gt;        &lt;int&gt; &lt;lgl&gt;   </span></span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt; 1 &quot;{\n  \&quot;cat… stop                 15        31        46          923 TRUE    </span></span>
-<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt; 2 &quot;{\n  \&quot;cat… stop                 15        30        45          129 TRUE    </span></span>
-<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; 3 &quot;{\n  \&quot;cat… stop                 14        36        50          129 TRUE    </span></span>
-<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt; # ℹ 12 more variables: annot_err &lt;chr&gt;, annot_id &lt;chr&gt;, annot_status &lt;int&gt;,</span></span>
-<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt; #   annot_ecode &lt;chr&gt;, annot_param &lt;chr&gt;, annot_t &lt;dbl&gt;, id &lt;int&gt;, text &lt;chr&gt;,</span></span>
-<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; #   structured_ok &lt;lgl&gt;, structured_data &lt;list&gt;, category &lt;chr&gt;,</span></span>
-<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt; #   rationale &lt;chr&gt;</span></span></code></pre></div>
+<div id="llm_mutate-shorthand-syntax-new-in-v0.6.2" class="section level2">
+<h2>llm_mutate: shorthand syntax (NEW in v0.6.2)</h2>
+<p>The shorthand lets you combine output column and prompt in one
+argument:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>df <span class="sc">|&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>    <span class="at">category =</span> <span class="st">&quot;Give a short category for: {text}&quot;</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>    <span class="at">.config =</span> cfg_cld</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  )</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co"># Equivalent to: llm_mutate(category, prompt = &quot;Give...&quot;, .config = cfg_cld)</span></span></code></pre></div>
+<p>Or with multi-turn messages:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>df <span class="sc">|&gt;</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>    <span class="at">classified =</span> <span class="fu">c</span>(</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>      <span class="at">system =</span> <span class="st">&quot;You are a text classifier. One word only.&quot;</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>      <span class="at">user =</span> <span class="st">&quot;Category for: {text}&quot;</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>    ),</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>    <span class="at">.config =</span> cfg_openai</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>  )</span></code></pre></div>
+</div>
+<div id="llm_mutate-with-.structured-flag-new-in-v0.6.2" class="section level2">
+<h2>llm_mutate with .structured flag (NEW in v0.6.2)</h2>
+<p>You can now enable structured output directly in
+<code>llm_mutate()</code> using <code>.structured = TRUE</code>:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>    <span class="at">category =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>    <span class="at">confidence =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;number&quot;</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  ),</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>  <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;category&quot;</span>, <span class="st">&quot;confidence&quot;</span>)</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>)</span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co"># Using .structured = TRUE (equivalent to calling llm_mutate_structured)</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>df <span class="sc">|&gt;</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    <span class="at">structured_result =</span> <span class="st">&quot;{text}&quot;</span>,</span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    <span class="at">.config =</span> cfg_openai,</span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>    <span class="at">.structured =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>    <span class="at">.schema =</span> schema</span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>  )</span></code></pre></div>
+<p>This is equivalent to calling <code>llm_mutate_structured()</code>
+and supports all the same shorthand syntax.</p>
+</div>
+<div id="llm_mutate_structured-structured-with-shorthand-gemini" class="section level2">
+<h2>llm_mutate_structured: structured with shorthand (Gemini)</h2>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>schema2 <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>    <span class="at">category  =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>    <span class="at">rationale =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>)</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  ),</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;category&quot;</span>, <span class="st">&quot;rationale&quot;</span>),</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>)</span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co"># Traditional call</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a>df_s <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a>  <span class="fu">llm_mutate_structured</span>(</span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>    annot,</span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>    <span class="at">prompt  =</span> <span class="st">&quot;Extract category and a one-sentence rationale for: {text}&quot;</span>,</span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a>    <span class="at">.config =</span> cfg_gemini,</span>
+<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a>    <span class="at">.schema =</span> schema2</span>
+<span id="cb10-18"><a href="#cb10-18" tabindex="-1"></a>    <span class="co"># Because a schema is present, fields auto-hoist; you can also pass:</span></span>
+<span id="cb10-19"><a href="#cb10-19" tabindex="-1"></a>    <span class="co"># .fields = c(&quot;category&quot;, &quot;rationale&quot;)</span></span>
+<span id="cb10-20"><a href="#cb10-20" tabindex="-1"></a>  )</span>
+<span id="cb10-21"><a href="#cb10-21" tabindex="-1"></a></span>
+<span id="cb10-22"><a href="#cb10-22" tabindex="-1"></a>df_s</span>
+<span id="cb10-23"><a href="#cb10-23" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" tabindex="-1"></a><span class="co"># Or use shorthand (NEW in v0.6.2)</span></span>
+<span id="cb10-25"><a href="#cb10-25" tabindex="-1"></a>df <span class="sc">|&gt;</span></span>
+<span id="cb10-26"><a href="#cb10-26" tabindex="-1"></a>  <span class="fu">llm_mutate_structured</span>(</span>
+<span id="cb10-27"><a href="#cb10-27" tabindex="-1"></a>    <span class="at">annot =</span> <span class="st">&quot;Extract category and rationale for: {text}&quot;</span>,</span>
+<span id="cb10-28"><a href="#cb10-28" tabindex="-1"></a>    <span class="at">.config =</span> cfg_gemini,</span>
+<span id="cb10-29"><a href="#cb10-29" tabindex="-1"></a>    <span class="at">.schema =</span> schema2</span>
+<span id="cb10-30"><a href="#cb10-30" tabindex="-1"></a>  )</span></code></pre></div>
 </div>
 
 

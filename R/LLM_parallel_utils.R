@@ -80,14 +80,26 @@
       # If every non-NULL is a scalar atomic -> produce a simple atomic column
       all_scalar <- all(vapply(vals, function(v) is.null(v) || is_scalar_atomic(v), logical(1)))
 
-      if (all_scalar) {
-        # make a vector; keep type simple (character fallback)
-        vapply(vals, function(v) {
-          if (is.null(v)) NA_character_
-          else as.character(v)
-        }, character(1))
+      if (all_scalar && requireNamespace("vctrs", quietly = TRUE)) {
+        nonnull <- vals[!vapply(vals, is.null, logical(1))]
+        if (length(nonnull)) {
+          ptype  <- vctrs::vec_ptype_common(!!!nonnull)
+          na_val <- vctrs::vec_cast(NA, ptype)
+          casted <- lapply(vals, function(v) if (is.null(v)) na_val else vctrs::vec_cast(v, ptype))
+          vctrs::vec_c(!!!casted)
+        } else {
+          rep(NA_character_, length(vals))
+        }
+      } else if (all_scalar) {
+        nn <- vals[!vapply(vals, is.null, logical(1))]
+        if (length(nn) && all(vapply(nn, is.numeric,  logical(1)))) {
+          vapply(vals, function(v) if (is.null(v)) NA_real_ else as.numeric(v),  numeric(1))
+        } else if (length(nn) && all(vapply(nn, is.logical, logical(1)))) {
+          vapply(vals, function(v) if (is.null(v)) NA       else as.logical(v), logical(1))
+        } else {
+          vapply(vals, function(v) if (is.null(v)) NA_character_ else as.character(v), character(1))
+        }
       } else {
-        # keep as list-column (tibble will accept mixed types per row)
         vals
       }
     })
@@ -357,10 +369,8 @@ call_llm_compare <- function(configs_list,
   )
 
   # Run parallel processing
-  results_raw <- call_llm_par(experiments, ...)
-  results_final <- results_raw
+  results_final <- call_llm_par(experiments, ...)
   results_final$config <- NULL
-  results_final
   return(results_final)
 }
 
@@ -375,13 +385,15 @@ call_llm_compare <- function(configs_list,
 #' @param simplify Whether to cbind 'experiments' to the output data frame or not.
 #' @param tries Integer. Number of retries for each call. Default is 10.
 #' @param wait_seconds Numeric. Initial wait time (seconds) before retry. Default is 2.
-#' @param backoff_factor Numeric. Multiplier for wait time after each failure. Default is 2.
+#' @param backoff_factor Numeric. Multiplier for wait time after each failure. Default is 3.
 #' @param verbose Logical. If TRUE, prints progress and debug information.
 #' @param memoize Logical. If TRUE, enables caching for identical requests.
 #' @param max_workers Integer. Maximum number of parallel workers. If NULL, auto-detects.
 #' @param progress Logical. If TRUE, shows progress bar.
 #' @param json_output Deprecated. Raw JSON string is always included as raw_response_json.
 #'                  This parameter is kept for backward compatibility but has no effect.
+#' @param start_jitter Calls are made after a uniformly distributed delay
+#'                  between 0 and \code{start_jitter} seconds.
 #'
 #' @return A tibble containing all original columns plus:
 #' \itemize{
@@ -433,12 +445,13 @@ call_llm_par <- function(experiments,
                          simplify = TRUE,
                          tries = 10,
                          wait_seconds = 2,
-                         backoff_factor = 3,
+                         backoff_factor = 120^(1/tries),
                          verbose = FALSE,
                          memoize = FALSE,
                          max_workers = NULL,
                          progress = FALSE,
-                         json_output = NULL) {
+                         json_output = NULL,
+                         start_jitter = 5) {
 
   if (!is.null(json_output) && verbose) {
     message("Note: The 'json_output' parameter is deprecated. Raw JSON is always included as 'raw_response_json'.")
@@ -510,13 +523,6 @@ call_llm_par <- function(experiments,
                     nrow(experiments), n_metadata_cols))
   }
 
-  # Helper: pull category from condition class, e.g. "llmr_api_rate_limit_error"
-  .category_from_condition <- function(e) {
-    cls <- class(e)
-    hit <- grep("^llmr_api_(.+)_error$", cls, value = TRUE)
-    if (length(hit)) sub("^llmr_api_(.+)_error$", "\\1", hit[[1]]) else "unknown"
-  }
-
   par_worker <- function(i_val) {
     # small helpers to guarantee column types
     as_char_or_na <- function(x) {
@@ -527,6 +533,10 @@ call_llm_par <- function(experiments,
       if (is.null(x) || length(x) == 0 || all(is.na(x))) return(NA_integer_)
       suppressWarnings(as.integer(x[[1]]))
     }
+
+    # random small delay so as to spread out the parallel calls
+    if (start_jitter>0)
+      Sys.sleep(stats::runif(1, 0, start_jitter))
 
     start_time <- Sys.time()
     current_config   <- experiments$config[[i_val]]
@@ -697,21 +707,21 @@ call_llm_par <- function(experiments,
 #' @param system_prompt_labels Optional labels for the system prompts.
 #'
 #' @return A tibble with columns: config (list-column), messages (list-column),
-#'   config_label, message_label, and repetition. Ready for use with call_llm_par().
+#'   config_label, user_prompt_label, system_prompt_label, and repetition. Ready for use with call_llm_par().
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#'   # Factorial design: 3 configs x 2 message conditions x 10 reps = 60 experiments
+#'   # Factorial design: 3 configs x 2 user prompts x 10 reps = 60 experiments
 #'   configs <- list(gpt4_config, claude_config, llama_config)
-#'   messages <- list("Control prompt", "Treatment prompt")
+#'   user_prompts <- c("Control prompt", "Treatment prompt")
 #'
 #'   experiments <- build_factorial_experiments(
 #'     configs = configs,
-#'     messages = messages,
+#'     user_prompts = user_prompts,
 #'     repetitions = 10,
 #'     config_labels = c("gpt4", "claude", "llama"),
-#'     message_labels = c("control", "treatment")
+#'     user_prompt_labels = c("control", "treatment")
 #'   )
 #'
 #'   # Use with call_llm_par
@@ -724,7 +734,7 @@ build_factorial_experiments <- function(configs,
                                         config_labels  = NULL,
                                         user_prompt_labels = NULL,
                                         system_prompt_labels = NULL
-                                        ) {
+) {
 
   # if (!missing(messages)) {
   #   lifecycle::deprecate_stop("0.5.0", "build_factorial_experiments(messages = )",
@@ -812,10 +822,11 @@ build_factorial_experiments <- function(configs,
 #' Convenience function to set up the future plan for optimal LLM parallel processing.
 #' Automatically detects system capabilities and sets appropriate defaults.
 #'
+#' @param workers Integer. Number of workers to use. If NULL, auto-detects optimal number
+#'                (availableCores - 1, capped at 8). If called as \code{setup_llm_parallel(4)},
+#'                the single numeric positional argument is interpreted as \code{workers}.
 #' @param strategy Character. The future strategy to use. Options: "multisession", "multicore", "sequential".
 #'                If NULL (default), automatically chooses "multisession".
-#' @param workers Integer. Number of workers to use. If NULL, auto-detects optimal number
-#'                (availableCores - 1, capped at 8).
 #' @param verbose Logical. If TRUE, prints setup information.
 #'
 #' @return Invisibly returns the previous future plan.
@@ -835,7 +846,7 @@ build_factorial_experiments <- function(configs,
 #'   # Restore old plan if needed
 #'   reset_llm_parallel()
 #' }
-setup_llm_parallel <- function(strategy = NULL, workers = NULL, verbose = FALSE) {
+setup_llm_parallel <- function(workers = NULL, strategy = NULL, verbose = FALSE) {
 
   if (!requireNamespace("future", quietly = TRUE)) {
     stop("The 'future' package is required. Please install it with: install.packages('future')")

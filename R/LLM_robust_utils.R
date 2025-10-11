@@ -222,6 +222,7 @@ call_llm_robust <- function(config, messages,
 #'
 #' @return The (memoised) response object from \code{\link{call_llm}}.
 #'
+#' @keywords internal
 #' @importFrom memoise memoise
 #' @export
 #' @name cache_llm_call
@@ -253,6 +254,7 @@ cache_llm_call <- memoise::memoise(function(config, messages, verbose = FALSE) {
 #' @return Invisibly returns \code{NULL}.
 #' @export
 #'
+#' @keywords internal
 #' @examples
 #' \dontrun{
 #'   # Example of logging an error by catching a failure:

@@ -35,3 +35,4 @@ or by restarting your R session.
   response2 <- cache_llm_call(my_config, list(list(role="user", content="Hello!")))
 }
 }
+\keyword{internal}

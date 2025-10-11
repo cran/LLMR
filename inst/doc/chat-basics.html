@@ -364,11 +364,7 @@ to ~/.Renviron</p>
 <span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
 <span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>chat_oai <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_openai, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
 <span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Say a warm hello in one short sentence.&quot;</span>)</span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; Hello there, it&#39;s wonderful to see you!</span></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; [model=gpt-5-nano | finish=stop | sent=22 rec=274 tot=296 | t=2.414s]</span></span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Now say it in Esperanto.&quot;</span>)</span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; Saluton, estas mirinde vidi vin!</span></span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; [model=gpt-5-nano | finish=stop | sent=47 rec=274 tot=321 | t=2.792s]</span></span></code></pre></div>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Now say it in Esperanto.&quot;</span>)</span></code></pre></div>
 </div>
 <div id="anthropic-claude-sonnet-4-20250514" class="section level2">
 <h2>Anthropic: claude-sonnet-4-20250514</h2>
@@ -379,22 +375,18 @@ to ~/.Renviron</p>
 <span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>)</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>chat_claude <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_anthropic, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>chat_claude<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Name one interesting fact about honey bees.&quot;</span>)</span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; Honey bees communicate the location of food sources through a &quot;waggle dance&quot; - when a forager bee returns to the hive, it performs specific movements that tell other bees the direction and distance to flowers, with the angle of the dance indicating direction relative to the sun and the duration indicating how far to fly.</span></span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; [model=claude-sonnet-4-20250514 | finish=stop | sent=16 rec=69 tot=85 | t=4.081s]</span></span></code></pre></div>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>chat_claude<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Name one interesting fact about honey bees.&quot;</span>)</span></code></pre></div>
 </div>
 <div id="gemini-gemini-2.5-flash" class="section level2">
 <h2>Gemini: gemini-2.5-flash</h2>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cfg_gemini <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;gemini&quot;</span>,</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;gemini-2.5-flash&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;gemini-2.5-flash-lite&quot;</span>,</span>
 <span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  </span>
 <span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>)</span>
 <span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a></span>
 <span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>chat_gem <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_gemini, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>chat_gem<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Give me a single-sentence fun fact about volcanoes.&quot;</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; Some volcanoes can actually create diamonds deep within the Earth.</span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; [model=gemini-2.5-flash | finish=stop | sent=15 rec=11 tot=26 | t=4.538s]</span></span></code></pre></div>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>chat_gem<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Give me a single-sentence fun fact about volcanoes.&quot;</span>)</span></code></pre></div>
 </div>
 <div id="groq-openaigpt-oss-20b" class="section level2">
 <h2>Groq: openai/gpt-oss-20b</h2>
@@ -405,28 +397,38 @@ to ~/.Renviron</p>
 <span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>)</span>
 <span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a></span>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>chat_groq <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_groq, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>chat_groq<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Share a short fun fact about octopuses.&quot;</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; Octopuses can taste with their arms—each of the 10 arms has hundreds of tiny “taste” receptors along the suckers, letting them sample food before they even bring it to their mouth.</span></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; [model=openai/gpt-oss-20b | finish=stop | sent=87 rec=68 tot=155 | t=0.394s]</span></span></code></pre></div>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>chat_groq<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Share a short fun fact about octopuses.&quot;</span>)</span></code></pre></div>
+</div>
+<div id="using-the-chat-history" class="section level2">
+<h2>Using the chat history</h2>
+<p>Chat sessions remember context automatically:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;What did I ask you to do in my first message?&quot;</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co"># The model can reference the earlier &quot;Say a warm hello&quot; request</span></span></code></pre></div>
+</div>
+<div id="inspect-the-full-conversation" class="section level2">
+<h2>Inspect the full conversation</h2>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># View all messages</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">as.data.frame</span>(chat_oai)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># Get summary statistics</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">summary</span>(chat_oai)</span></code></pre></div>
 </div>
 <div id="structured-chat-in-one-call-openai-example" class="section level2">
 <h2>Structured chat in one call (OpenAI example)</h2>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>    <span class="at">answer     =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="at">confidence =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;number&quot;</span>)</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  ),</span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;answer&quot;</span>, <span class="st">&quot;confidence&quot;</span>),</span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>)</span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send_structured</span>(</span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  <span class="st">&quot;Return an answer and a confidence score (0-1) about: Why is the sky blue?&quot;</span>,</span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>  schema</span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>)</span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; {&quot;answer&quot;:&quot;The sky looks blue because sunlight scatters off air molecules, and shorter wavelengths (blue) scatter more than longer wavelengths; since violet is absorbed and the Sun isn’t mostly violet, the scattered blue light comes from every direction.&quot;, &quot;confidence&quot;:0.9}</span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; [model=gpt-5-nano | finish=stop | sent=129 rec=709 tot=838 | t=5.204s]</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>    <span class="at">answer     =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>    <span class="at">confidence =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;number&quot;</span>)</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  ),</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>  <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;answer&quot;</span>, <span class="st">&quot;confidence&quot;</span>),</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>  <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>)</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send_structured</span>(</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="st">&quot;Return an answer and a confidence score (0-1) about: Why is the sky blue?&quot;</span>,</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>  schema</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 
 
