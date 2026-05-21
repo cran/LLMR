@@ -343,14 +343,17 @@ Embeddings</h1>
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>knitr<span class="sc">::</span>opts_chunk<span class="sc">$</span><span class="fu">set</span>(</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>is_package_check <span class="ot">&lt;-</span> <span class="fu">nzchar</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;_R_CHECK_PACKAGE_NAME_&quot;</span>)) <span class="sc">||</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>  <span class="fu">nzchar</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;_R_CHECK_CRAN_INCOMING_&quot;</span>))</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>run_llmr_vignette <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) <span class="sc">&amp;&amp;</span></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a>  <span class="sc">!</span>is_package_check</span></code></pre></div>
 <p>This vignette demonstrates how to use LLMR for embedding analysis of
 presidential inaugural speeches.</p>
 <p><strong>Note:</strong> This vignette requires a valid Gemini API key
-and will not run during package installation, and you may need to change
-the model name.**</p>
+and never runs live API calls during package checks. To run it locally,
+set <code>LLMR_RUN_VIGNETTES=true</code> before rendering.**</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span></code></pre></div>
 <div id="prepare-the-text-data" class="section level2">
 <h2>Prepare the Text Data</h2>
@@ -364,47 +367,63 @@ addresses:</p>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">Bush =</span> <span class="st">&quot;The peaceful transfer of authority is rare in history, yet common in our country. With a simple oath, we affirm old traditions and make new beginnings. As I begin, I thank President Clinton for his service to our Nation, and I thank Vice President Gore for a contest conducted with spirit and ended with grace. I am honored and humbled to stand here where so many of America&#39;s leaders have come before me, and so many will follow. We have a place, all of us, in a long story, a story we continue but whose end we will not see. It is a story of a new world that became a friend and liberator of the old, the story of a slaveholding society that became a servant of freedom, the story of a power that went into the world to protect but not possess, to defend but not to conquer.&quot;</span>,</span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="at">Obama =</span> <span class="st">&quot;My fellow citizens, I stand here today humbled by the task before us, grateful for the trust you have bestowed, mindful of the sacrifices borne by our ancestors. I thank President Bush for his service to our Nation, as well as the generosity and cooperation he has shown throughout this transition. Forty-four Americans have now taken the Presidential oath. The words have been spoken during rising tides of prosperity and the still waters of peace. Yet every so often, the oath is taken amidst gathering clouds and raging storms. At these moments, America has carried on not simply because of the skill or vision of those in high office, but because we the people have remained faithful to the ideals of our forebears and true to our founding documents.&quot;</span>,</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="at">Trump =</span> <span class="st">&quot;We, the citizens of America, are now joined in a great national effort to rebuild our country and restore its promise for all of our people. Together, we will determine the course of America and the world for many, many years to come. We will face challenges, we will confront hardships, but we will get the job done. Every 4 years, we gather on these steps to carry out the orderly and peaceful transfer of power, and we are grateful to President Obama and First Lady Michelle Obama for their gracious aid throughout this transition. They have been magnificent. Thank you.&quot;</span>,</span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  <span class="at">Biden =</span> <span class="st">&quot;This is America&#39;s day. This is democracy&#39;s day, a day of history and hope, of renewal and resolve. Through a crucible for the ages America has been tested anew, and America has risen to the challenge. Today we celebrate the triumph not of a candidate, but of a cause, the cause of democracy. The people—the will of the people has been heard, and the will of the people has been heeded. We&#39;ve learned again that democracy is precious, democracy is fragile. And at this hour, my friends, democracy has prevailed.&quot;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  <span class="at">Biden =</span> <span class="st">&quot;This is America&#39;s day. This is democracy&#39;s day, a day of history and hope, of renewal and resolve. Through a crucible for the ages America has been tested anew, and America has risen to the challenge. Today we celebrate the triumph not of a candidate, but of a cause, the cause of democracy. The people, the will of the people has been heard, and the will of the people has been heeded. We&#39;ve learned again that democracy is precious, democracy is fragile. And at this hour, my friends, democracy has prevailed.&quot;</span></span>
 <span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="configure-embedding-model" class="section level2">
 <h2>Configure Embedding Model</h2>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>embed_cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">provider  =</span> <span class="st">&quot;gemini&quot;</span>,</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model     =</span> <span class="st">&quot;embedding-001&quot;</span>, <span class="co"># or &quot;text-embedding-004&quot;,</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model     =</span> <span class="st">&quot;gemini-embedding-001&quot;</span>,</span>
 <span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">task_type =</span> <span class="st">&quot;CLASSIFICATION&quot;</span>,</span>
 <span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">embedding =</span> <span class="cn">TRUE</span></span>
 <span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="generate-embeddings" class="section level2">
 <h2>Generate Embeddings</h2>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>embeddings <span class="ot">&lt;-</span> <span class="fu">get_batched_embeddings</span>(</span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">texts =</span> text_input,</span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">embed_config =</span> embed_cfg,</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  <span class="at">batch_size =</span> <span class="dv">5</span> </span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="cf">if</span> (run_llmr_vignette) {</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  embeddings <span class="ot">&lt;-</span> <span class="fu">get_batched_embeddings</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>    <span class="at">texts =</span> text_input,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>    <span class="at">embed_config =</span> embed_cfg,</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>    <span class="at">batch_size =</span> <span class="dv">5</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  )</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  embeddings <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  <span class="fu">message</span>(<span class="st">&quot;Set LLMR_RUN_VIGNETTES=true to generate live Gemini embeddings.&quot;</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>}</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt; Set LLMR_RUN_VIGNETTES=true to generate live Gemini embeddings.</span></span></code></pre></div>
 </div>
 <div id="analyze-similarity" class="section level2">
 <h2>Analyze Similarity</h2>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># Compute correlation matrix</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>cors <span class="ot">&lt;-</span> <span class="fu">cor</span>(<span class="fu">t</span>(embeddings))</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">round</span>(cors, <span class="dv">2</span>))</span></code></pre></div>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># Normalize embeddings for cosine similarity</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>embd_normalized <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">apply</span>(embeddings, <span class="dv">1</span>, </span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>                          <span class="cf">function</span>(x) x <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>))))</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co"># Compute cosine similarity matrix</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>sim_matrix <span class="ot">&lt;-</span> embd_normalized <span class="sc">%*%</span> <span class="fu">t</span>(embd_normalized)</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co"># Convert similarity to distance</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>dist_matrix <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> sim_matrix</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co"># Convert to a distance object</span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>dist_object <span class="ot">&lt;-</span> <span class="fu">as.dist</span>(dist_matrix)</span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co"># Perform hierarchical clustering</span></span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>hc <span class="ot">&lt;-</span> <span class="fu">hclust</span>(dist_object, <span class="at">method =</span> <span class="st">&quot;ward.D2&quot;</span>)</span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="fu">plot</span>(hc, <span class="at">main =</span> <span class="st">&quot;Clustering of Presidential Inaugural Speeches</span><span class="sc">\n</span><span class="st">(only beginning the paragraphs)&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="cf">if</span> (run_llmr_vignette) {</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="co"># Compute correlation matrix</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  cors <span class="ot">&lt;-</span> <span class="fu">cor</span>(<span class="fu">t</span>(embeddings))</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="fu">print</span>(<span class="fu">round</span>(cors, <span class="dv">2</span>))</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="fu">message</span>(<span class="st">&quot;Set LLMR_RUN_VIGNETTES=true to compute live embedding similarities.&quot;</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>}</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; Set LLMR_RUN_VIGNETTES=true to compute live embedding similarities.</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="cf">if</span> (run_llmr_vignette) {</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="co"># Normalize embeddings for cosine similarity</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  embd_normalized <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">apply</span>(embeddings, <span class="dv">1</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>                            <span class="cf">function</span>(x) x <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(x<span class="sc">^</span><span class="dv">2</span>))))</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="co"># Compute cosine similarity matrix</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  sim_matrix <span class="ot">&lt;-</span> embd_normalized <span class="sc">%*%</span> <span class="fu">t</span>(embd_normalized)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  <span class="co"># Convert similarity to distance</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  dist_matrix <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> sim_matrix</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  <span class="co"># Convert to a distance object</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>  dist_object <span class="ot">&lt;-</span> <span class="fu">as.dist</span>(dist_matrix)</span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>  <span class="co"># Perform hierarchical clustering</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>  hc <span class="ot">&lt;-</span> <span class="fu">hclust</span>(dist_object, <span class="at">method =</span> <span class="st">&quot;ward.D2&quot;</span>)</span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>  <span class="fu">plot</span>(hc, <span class="at">main =</span> <span class="st">&quot;Clustering of Presidential Inaugural Speeches</span><span class="sc">\n</span><span class="st">(only beginning the paragraphs)&quot;</span>)</span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>  <span class="fu">message</span>(<span class="st">&quot;Set LLMR_RUN_VIGNETTES=true to run live embedding clustering.&quot;</span>)</span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>}</span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; Set LLMR_RUN_VIGNETTES=true to run live embedding clustering.</span></span></code></pre></div>
 </div>
 <div id="expected-results" class="section level2">
 <h2>Expected Results</h2>
@@ -420,8 +439,8 @@ similarity</li>
 rhetoric</li>
 </ol>
 <p><strong>To run this vignette yourself:</strong> Set your Gemini API
-key with <code>Sys.setenv(GEMINI_API_KEY = &quot;your_key_here&quot;)</code>
-before running the code chunks.</p>
+key in your environment and set <code>LLMR_RUN_VIGNETTES=true</code>
+before rendering the vignette.</p>
 </div>
 
 

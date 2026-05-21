@@ -43,7 +43,7 @@ knitr::opts_chunk$set(
 # 
 #   cfg <- llm_config(
 #     provider = "groq",
-#     model    = "qwen-2.5-72b-instruct",   # a Qwen Instruct model on Groq
+#     model    = "openai/gpt-oss-20b",
 #     temperature = 0
 #   )
 #   cfg_strict <- enable_structured_output(cfg, schema = schema, strict = TRUE)
@@ -58,7 +58,9 @@ knitr::opts_chunk$set(
 #     .validate_local = TRUE
 #   )
 # 
-#   out %>% select(structured_ok, structured_valid, title, year, tags) %>% print(n = Inf)
+#   out |>
+#     select(structured_ok, structured_valid, title, year, tags) |>
+#     print(n = Inf)
 # })
 
 ## -----------------------------------------------------------------------------
@@ -71,7 +73,7 @@ knitr::opts_chunk$set(
 #     additionalProperties=FALSE
 #   )
 # 
-#   cfg <- llm_config("anthropic","claude-3-5-haiku-latest", temperature = 0)
+#   cfg <- llm_config("anthropic", "claude-sonnet-4-6", max_tokens = 512)
 #   cfg <- enable_structured_output(cfg, schema = schema, name = "llmr_schema")
 # 
 #   res <- call_llm(cfg, c(

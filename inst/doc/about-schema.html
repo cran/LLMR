@@ -12,7 +12,7 @@
 
 
 
-<title>JSON output vs. schema-validated output in LLMR</title>
+<title>Schema-validated output in LLMR</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -336,8 +336,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">JSON output vs. schema-validated output in
-LLMR</h1>
+<h1 class="title toc-ignore">Schema-validated output in LLMR</h1>
 
 
 
@@ -368,8 +367,8 @@ DeepSeek)</strong><br />
 Chat Completions accept a <code>response_format</code> (e.g.,
 <code>{&quot;type&quot;:&quot;json_object&quot;}</code> or a JSON-Schema payload).
 Enforcement varies by provider but the interface is OpenAI-shaped.<br />
-See <a href="https://platform.openai.com/docs/guides/structured-outputs">OpenAI
-API overview</a>, <a href="https://console.groq.com/docs/structured-outputs">Groq API
+See <a href="https://cookbook.openai.com/examples/structured_outputs_intro">OpenAI
+Structured Outputs cookbook</a>, <a href="https://console.groq.com/docs/structured-outputs">Groq API
 (OpenAI-compatible)</a>, <a href="https://docs.together.ai/docs/json-mode">Together: OpenAI
 compatibility</a>, <a href="https://docs.x.ai/docs/guides/structured-outputs">x.ai: OpenAI API
 schema</a>, <a href="https://api-docs.deepseek.com/guides/json_mode">DeepSeek:
@@ -379,7 +378,7 @@ No global “JSON mode.” Instead, you <strong>define a tool</strong> with
 an <strong><code>input_schema</code></strong> (JSON Schema) and
 <strong>force</strong> it via <code>tool_choice</code>, so the model
 must return a JSON object that validates the schema.<br />
-See <a href="https://docs.claude.com/en/api/messages#tools">Anthropic
+See <a href="https://platform.claude.com/docs/en/api/messages#tools">Anthropic
 Messages API: tools &amp; <code>input_schema</code></a></p></li>
 <li><p><strong>Google Gemini (REST)</strong><br />
 Set <code>responseMimeType = &quot;application/json&quot;</code> in
@@ -479,12 +478,12 @@ don’t strictly enforce it; LLMR’s parser recovers from fences or
 pre/post text.</p>
 <hr />
 </div>
-<div id="schema-mode-that-actually-works-groq-qwen-open-weights-non-commercial-friendly" class="section level3">
-<h3>2) <strong>Schema mode that actually works</strong> (Groq + Qwen,
-<em>open-weights / non-commercial friendly</em>)</h3>
-<p>Groq serves Qwen 2.5 Instruct models with OpenAI-compatible APIs.
-Their <strong>Structured Outputs</strong> feature enforces JSON Schema
-and (notably) expects <strong>all properties to be listed under
+<div id="schema-mode-that-actually-works-groq-open-model" class="section level3">
+<h3>2) <strong>Schema mode that actually works</strong> (Groq, open
+model)</h3>
+<p>Groq serves <code>openai/gpt-oss-20b</code> with OpenAI-compatible
+APIs. Their <strong>Structured Outputs</strong> feature enforces JSON
+Schema and (notably) expects <strong>all properties to be listed under
 <code>required</code></strong>.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">safe</span>({</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR); <span class="fu">library</span>(dplyr)</span>
@@ -503,7 +502,7 @@ and (notably) expects <strong>all properties to be listed under
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a></span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a>    <span class="at">provider =</span> <span class="st">&quot;groq&quot;</span>,</span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;qwen-2.5-72b-instruct&quot;</span>,   <span class="co"># a Qwen Instruct model on Groq</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;openai/gpt-oss-20b&quot;</span>,</span>
 <span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a>    <span class="at">temperature =</span> <span class="dv">0</span></span>
 <span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a>  )</span>
 <span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a>  cfg_strict <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema, <span class="at">strict =</span> <span class="cn">TRUE</span>)</span>
@@ -518,8 +517,10 @@ and (notably) expects <strong>all properties to be listed under
 <span id="cb4-30"><a href="#cb4-30" tabindex="-1"></a>    <span class="at">.validate_local =</span> <span class="cn">TRUE</span></span>
 <span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a>  )</span>
 <span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a></span>
-<span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a>  out <span class="sc">%&gt;%</span> <span class="fu">select</span>(structured_ok, structured_valid, title, year, tags) <span class="sc">%&gt;%</span> <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span>
-<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a>})</span></code></pre></div>
+<span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a>  out <span class="sc">|&gt;</span></span>
+<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a>    <span class="fu">select</span>(structured_ok, structured_valid, title, year, tags) <span class="sc">|&gt;</span></span>
+<span id="cb4-35"><a href="#cb4-35" tabindex="-1"></a>    <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span>
+<span id="cb4-36"><a href="#cb4-36" tabindex="-1"></a>})</span></code></pre></div>
 <p>If your key is set, you should see <code>structured_ok = TRUE</code>,
 <code>structured_valid = TRUE</code>, plus parsed columns.</p>
 <p><strong>Common gotcha</strong>: If Groq returns a 400 error
@@ -540,7 +541,7 @@ Groq’s structured output implementation is stricter than OpenAI’s.</p>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>    <span class="at">additionalProperties=</span><span class="cn">FALSE</span></span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  )</span>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>,<span class="st">&quot;claude-3-5-haiku-latest&quot;</span>, <span class="at">temperature =</span> <span class="dv">0</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>, <span class="st">&quot;claude-sonnet-4-6&quot;</span>, <span class="at">max_tokens =</span> <span class="dv">512</span>)</span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema, <span class="at">name =</span> <span class="st">&quot;llmr_schema&quot;</span>)</span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a></span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  res <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="fu">c</span>(</span>
@@ -635,6 +636,9 @@ and validation.</p>
 and retry.</li>
 <li><strong>Exploration / ad-hoc:</strong> JSON mode + recovery
 parser.</li>
+<li><strong>Lightweight field extraction:</strong> Tag mode with
+<code>.tags</code>; useful when strict schema support is unavailable or
+unnecessarily heavy.</li>
 <li><strong>Cross-provider code:</strong> Always wrap provider toggles
 with <code>enable_structured_output()</code> and run
 <code>llm_parse_structured()</code> + local validation.</li>
@@ -644,12 +648,12 @@ with <code>enable_structured_output()</code> and run
 <div id="references" class="section level2">
 <h2>References</h2>
 <ul>
-<li>OpenAI: Structure Output: <a href="https://platform.openai.com/docs/guides/structured-outputs">https://platform.openai.com/docs/guides/structured-outputs</a></li>
+<li>OpenAI: Structured Outputs cookbook: <a href="https://cookbook.openai.com/examples/structured_outputs_intro">https://cookbook.openai.com/examples/structured_outputs_intro</a></li>
 <li>Groq: Structured Outputs: <a href="https://console.groq.com/docs/structured-outputs">https://console.groq.com/docs/structured-outputs</a></li>
 <li>Together: Structured Output: <a href="https://docs.together.ai/docs/json-mode">https://docs.together.ai/docs/json-mode</a></li>
 <li>x.ai: Structured Output: <a href="https://docs.x.ai/docs/guides/structured-outputs">https://docs.x.ai/docs/guides/structured-outputs</a></li>
 <li>DeepSeek: JSON Mode: <a href="https://api-docs.deepseek.com/guides/json_mode">https://api-docs.deepseek.com/guides/json_mode</a></li>
-<li>Anthropic: Messages API, tools &amp; <code>input_schema</code>: <a href="https://docs.claude.com/en/api/messages#body-tool-choice">https://docs.claude.com/en/api/messages#body-tool-choice</a></li>
+<li>Anthropic: Messages API, tools &amp; <code>input_schema</code>: <a href="https://platform.claude.com/docs/en/api/messages#body-tool-choice">https://platform.claude.com/docs/en/api/messages#body-tool-choice</a></li>
 <li>Google Gemini: Structured Output: <a href="https://ai.google.dev/gemini-api/docs/structured-output">https://ai.google.dev/gemini-api/docs/structured-output</a></li>
 </ul>
 </div>

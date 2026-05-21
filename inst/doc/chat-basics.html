@@ -345,8 +345,8 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
 <p>This vignette shows basic chat usage with four providers and model
-names: - OpenAI: gpt-5-nano - Anthropic: claude-sonnet-4-20250514 -
-Gemini: gemini-2.5-flash - Groq: openai/gpt-oss-20b</p>
+names: - OpenAI: gpt-5-nano - Anthropic: claude-sonnet-4-6 - Gemini:
+gemini-2.5-flash-lite - Groq: openai/gpt-oss-20b</p>
 <p>You will need API keys in these environment variables:
 OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
 <p>To run these examples locally, set a local flag: -
@@ -366,19 +366,19 @@ to ~/.Renviron</p>
 <span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Say a warm hello in one short sentence.&quot;</span>)</span>
 <span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Now say it in Esperanto.&quot;</span>)</span></code></pre></div>
 </div>
-<div id="anthropic-claude-sonnet-4-20250514" class="section level2">
-<h2>Anthropic: claude-sonnet-4-20250514</h2>
+<div id="anthropic-claude-sonnet-4-6" class="section level2">
+<h2>Anthropic: claude-sonnet-4-6</h2>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>cfg_anthropic <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;anthropic&quot;</span>,</span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;claude-sonnet-4-20250514&quot;</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;claude-sonnet-4-6&quot;</span>,</span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">max_tokens =</span> <span class="dv">512</span>   <span class="co"># avoid warnings; Anthropic requires max_tokens</span></span>
 <span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>)</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>chat_claude <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_anthropic, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>chat_claude<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Name one interesting fact about honey bees.&quot;</span>)</span></code></pre></div>
 </div>
-<div id="gemini-gemini-2.5-flash" class="section level2">
-<h2>Gemini: gemini-2.5-flash</h2>
+<div id="gemini-gemini-2.5-flash-lite" class="section level2">
+<h2>Gemini: gemini-2.5-flash-lite</h2>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cfg_gemini <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;gemini&quot;</span>,</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;gemini-2.5-flash-lite&quot;</span>,</span>

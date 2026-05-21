@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 ## -----------------------------------------------------------------------------
 # cfg_anthropic <- llm_config(
 #   provider = "anthropic",
-#   model    = "claude-sonnet-4-20250514",
+#   model    = "claude-sonnet-4-6",
 #   max_tokens = 512   # avoid warnings; Anthropic requires max_tokens
 # )
 # 

@@ -9,8 +9,8 @@ knitr::opts_chunk$set(
 # library(dplyr)
 # 
 # cfg_openai <- llm_config("openai",   "gpt-5-nano")
-# cfg_cld    <- llm_config("anthropic","claude-sonnet-4-20250514", max_tokens = 512)  # avoid warnings; Anthropic requires max_tokens
-# cfg_gemini <- llm_config("gemini",   "gemini-2.5-flash")
+# cfg_cld    <- llm_config("anthropic","claude-sonnet-4-6", max_tokens = 512)  # avoid warnings; Anthropic requires max_tokens
+# cfg_gemini <- llm_config("gemini",   "gemini-2.5-flash-lite")
 # cfg_groq   <- llm_config("groq",     "openai/gpt-oss-20b")
 
 ## -----------------------------------------------------------------------------
@@ -102,6 +102,20 @@ knitr::opts_chunk$set(
 #     .config = cfg_openai,
 #     .structured = TRUE,
 #     .schema = schema
+#   )
+
+## -----------------------------------------------------------------------------
+# cities <- tibble::tibble(city = c("Cairo", "Lima", "Seoul"))
+# 
+# cities |>
+#   llm_mutate(
+#     geo = "Where is {city}? Give country and continent in their own tags.",
+#     .config = cfg_groq,
+#     .system_prompt = paste(
+#       "Use XML tags to specify different parts of the answer, but do not nest tags.",
+#       "Return <country>...</country> and <continent>...</continent>."
+#     ),
+#     .tags = c("country", "continent")
 #   )
 
 ## -----------------------------------------------------------------------------
