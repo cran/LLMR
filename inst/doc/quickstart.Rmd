@@ -1,0 +1,203 @@
+---
+title: "LLMR in 5 minutes"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{LLMR in 5 minutes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  eval = identical(tolower(Sys.getenv("LLMR_RUN_VIGNETTES", "false")), "true")
+)
+```
+
+LLMR gives R one interface to many language-model providers. You pick the
+provider and model once with `llm_config()`; every other function behaves the
+same regardless of which model is behind it.
+
+## 1. Install
+
+```r
+install.packages("LLMR")                   # CRAN
+# remotes::install_github("asanaei/LLMR")  # development version
+```
+
+## 2. Set an API key
+
+You can hand `llm_config()` your key directly as a string, but the safer habit
+is to keep it out of your code and let LLMR read it from an environment
+variable. For each provider LLMR knows a default variable to look in: it tries
+`<PROVIDER>_API_KEY` first, then `<PROVIDER>_KEY` (upper-cased), so Groq reads
+`GROQ_API_KEY`, OpenAI reads `OPENAI_API_KEY`, and so on. If you set that
+variable, you never pass a key in code at all.
+
+Put the key in your `~/.Renviron` file, one per line:
+
+```
+GROQ_API_KEY=...
+```
+
+The easiest way to open that file is:
+
+```r
+usethis::edit_r_environ()
+```
+
+Save it and **restart R**. You can check that R sees the key without printing it:
+
+```r
+nzchar(Sys.getenv("GROQ_API_KEY"))   # TRUE once it is set
+```
+
+If this is `FALSE`, R cannot see the key yet: check the spelling and that you
+restarted the session. A missing key shows up as an authentication error on your
+first call, not before.
+
+## 3. Your first call
+
+`llm_config()` selects the model; `call_llm()` sends one message and returns a
+response object that prints the text plus a short status line. We use Groq's
+open-weight `gpt-oss-20b` here because it is cheap and available to everyone.
+
+```{r}
+library(LLMR)
+
+cfg <- llm_config("groq", "openai/gpt-oss-20b", temperature = 0.2)
+
+r <- call_llm(cfg, c(system = "Be concise.", user = "Capital of Mongolia?"))
+r                 # prints the text and a [model | finish | tokens | t] line
+as.character(r)   # just the text
+tokens(r)         # token counts as a list
+```
+
+A message is a named character vector; the names are roles (`system`, `user`,
+`assistant`). A bare string is treated as a single user turn.
+
+## 4. Apply a model to a data frame
+
+`llm_mutate()` adds model-generated columns to a tibble. The shorthand puts the
+new column name and a `glue` prompt template in one argument; `{column}` is
+filled from each row.
+
+```{r}
+library(tibble)
+
+reviews <- tibble(text = c("The food was cold.",
+                           "Absolutely loved it!",
+                           "It was fine, nothing special."))
+
+reviews |>
+  llm_mutate(
+    sentiment = "Reply with one word (positive/negative/neutral): {text}",
+    .config   = cfg
+  )
+```
+
+Alongside the `sentiment` column you also get diagnostic columns
+(`sentiment_ok`, `sentiment_finish`, `sentiment_sent`, `sentiment_rec`, ...) so
+you can see what succeeded and how many tokens each row used.
+
+## 5. Generative calls over a vector
+
+`llm_fn()` is the lighter-weight sibling of `llm_mutate()`: give it a vector and
+a `glue` prompt where `{x}` is each element, and it returns a character vector.
+
+```{r}
+countries <- c("Mongolia", "Bolivia", "Chad")
+
+llm_fn(countries,
+       prompt  = "Capital city of {x}. Reply with only the city name.",
+       .config = cfg)
+```
+
+Switching to a different provider or model is a one-line change to
+`llm_config()`; nothing else in your code changes.
+
+## 6. Tagged fields and row batching
+
+When you want several fields per row, ask the model to wrap each in a named tag
+and pass `.tags`; LLMR parses them into columns. Add `.rows_per_prompt` to pack
+multiple rows into one request (sent as numbered `<row_i>` blocks and split back
+apart), which cuts the number of calls and the repeated instruction overhead.
+
+```{r}
+films <- tibble(title = c("Blade Runner", "Amelie", "Parasite", "Spirited Away"))
+
+films |>
+  llm_mutate(
+    info       = "For the film {title}, give its director and release year.",
+    .config    = cfg,
+    .tags      = c("director", "year"),
+    .rows_per_prompt = 2
+  )
+```
+
+The four films were resolved in two calls (`info_bn = 2`). The `info_batch`,
+`info_bn`, and `info_bi` columns record which call each row landed in and its
+position within it; the rows always come back in their original order. Prefer
+modest batch sizes and `temperature = 0`: batching only pays off when the model
+reliably follows the wrapping protocol.
+
+## 7. Embeddings
+
+Embeddings turn text into numeric vectors you can compare. They use a different
+kind of model, so you make a config with `embedding = TRUE`; here we use Voyage,
+which specializes in embeddings (set `VOYAGE_API_KEY`). `get_batched_embeddings()`
+takes a character vector and returns a matrix with one row per text.
+
+```{r}
+emb_cfg <- llm_config("voyage", "voyage-3.5-lite", embedding = TRUE)
+
+texts <- c("I love this restaurant.",
+           "The food was delicious.",
+           "My car broke down today.")
+
+m <- get_batched_embeddings(texts, emb_cfg)
+dim(m)   # 3 texts x embedding dimension
+```
+
+Closeness in this space tracks meaning. Cosine similarity is high for the two
+sentences about food and low for the unrelated one:
+
+```{r}
+cosine <- function(a, b) sum(a * b) / sqrt(sum(a * a) * sum(b * b))
+
+cosine(m[1, ], m[2, ])   # food vs food: high
+cosine(m[1, ], m[3, ])   # food vs car:  low
+```
+
+## 8. Look before you spend, summarize after
+
+`llm_preview()` shows exactly what would be sent, with no API call, so you can
+catch a templating or role mistake before paying for it:
+
+```{r}
+llm_preview(reviews,
+            prompt  = "Reply with one word: {text}",
+            .config = cfg)
+```
+
+After a run, `llm_usage()` summarizes token totals and outcomes, and
+`llm_failures()` lists any rows that failed or were truncated:
+
+```{r}
+out <- reviews |>
+  llm_mutate(sentiment = "One word for: {text}", .config = cfg)
+
+llm_usage(out)
+llm_failures(out)
+```
+
+## Where to go next
+
+- **Tidy pipelines and structured output** -- `llm_fn()`, `.tags`, JSON schemas,
+  and row batching.
+- **Schema-validated output** -- enforcing a JSON shape across providers.
+- **Presidential speech analysis** -- a fuller embeddings example with
+  clustering.
+- **Small experiment** -- factorial designs and parallel execution with
+  `call_llm_par()`.
+- **Chat sessions** -- stateful multi-turn conversations.

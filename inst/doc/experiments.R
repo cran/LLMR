@@ -6,13 +6,13 @@ knitr::opts_chunk$set(
 ## -----------------------------------------------------------------------------
 # library(LLMR)
 # library(dplyr)
-# cfg_openai <- llm_config("openai",   "gpt-5-nano")
-# cfg_cld    <- llm_config("anthropic","claude-sonnet-4-6", max_tokens = 512)
+# cfg_ds     <- llm_config("deepseek", "deepseek-chat")
+# cfg_groq1  <- llm_config("groq",     "llama-3.1-8b-instant")
 # cfg_groq   <- llm_config("groq",     "openai/gpt-oss-20b")
 
 ## -----------------------------------------------------------------------------
 # experiments <- build_factorial_experiments(
-#   configs       = list(cfg_openai, cfg_cld, cfg_groq),
+#   configs       = list(cfg_ds, cfg_groq1, cfg_groq),
 #   user_prompts  = c("Summarize in one sentence: The Apollo program.",
 #                     "List two benefits of green tea."),
 #   system_prompts = c("Be concise.")

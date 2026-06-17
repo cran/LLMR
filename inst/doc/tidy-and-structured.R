@@ -8,17 +8,16 @@ knitr::opts_chunk$set(
 # library(LLMR)
 # library(dplyr)
 # 
-# cfg_openai <- llm_config("openai",   "gpt-5-nano")
-# cfg_cld    <- llm_config("anthropic","claude-sonnet-4-6", max_tokens = 512)  # avoid warnings; Anthropic requires max_tokens
-# cfg_gemini <- llm_config("gemini",   "gemini-2.5-flash-lite")
-# cfg_groq   <- llm_config("groq",     "openai/gpt-oss-20b")
+# cfg_ds    <- llm_config("deepseek", "deepseek-chat")
+# cfg_groq1 <- llm_config("groq",     "llama-3.1-8b-instant")
+# cfg_groq  <- llm_config("groq",     "openai/gpt-oss-20b")
 
 ## -----------------------------------------------------------------------------
 # words <- c("excellent", "awful", "fine")
 # out <- llm_fn(
 #   words,
 #   prompt  = "Classify '{x}' as Positive, Negative, or Neutral.",
-#   .config = cfg_openai,
+#   .config = cfg_ds,
 #   .return = "columns"
 # )
 # out
@@ -27,7 +26,7 @@ knitr::opts_chunk$set(
 # out_groq <- llm_fn(
 #   words,
 #   prompt  = "Classify '{x}' as Positive, Negative, or Neutral.",
-#   .config = cfg_groq,
+#   .config = cfg_groq1,
 #   .return = "columns"
 # )
 # out_groq
@@ -46,7 +45,7 @@ knitr::opts_chunk$set(
 # out_s <- llm_fn_structured(
 #   x = words,
 #   prompt  = "Classify '{x}' as Positive, Negative, or Neutral with confidence.",
-#   .config = cfg_openai,
+#   .config = cfg_ds,
 #   .schema = schema,
 #   .fields = c("label", "score")
 # )
@@ -61,7 +60,7 @@ knitr::opts_chunk$set(
 # df_u <- df |>
 #   llm_mutate(
 #     answer  = "Give a short category for: {text}",
-#     .config = cfg_cld,
+#     .config = cfg_groq,
 #     .return = "columns"
 #   )
 # 
@@ -71,9 +70,9 @@ knitr::opts_chunk$set(
 # df |>
 #   llm_mutate(
 #     category = "Give a short category for: {text}",
-#     .config = cfg_cld
+#     .config = cfg_groq
 #   )
-# # Equivalent to: llm_mutate(category, prompt = "Give...", .config = cfg_cld)
+# # Equivalent to: llm_mutate(category, prompt = "Give...", .config = cfg_groq)
 
 ## -----------------------------------------------------------------------------
 # df |>
@@ -82,7 +81,7 @@ knitr::opts_chunk$set(
 #       system = "You are a text classifier. One word only.",
 #       user = "Category for: {text}"
 #     ),
-#     .config = cfg_openai
+#     .config = cfg_ds
 #   )
 
 ## -----------------------------------------------------------------------------
@@ -99,7 +98,7 @@ knitr::opts_chunk$set(
 # df |>
 #   llm_mutate(
 #     structured_result = "{text}",
-#     .config = cfg_openai,
+#     .config = cfg_ds,
 #     .structured = TRUE,
 #     .schema = schema
 #   )
@@ -110,13 +109,33 @@ knitr::opts_chunk$set(
 # cities |>
 #   llm_mutate(
 #     geo = "Where is {city}? Give country and continent in their own tags.",
-#     .config = cfg_groq,
+#     .config = cfg_groq1,
 #     .system_prompt = paste(
 #       "Use XML tags to specify different parts of the answer, but do not nest tags.",
 #       "Return <country>...</country> and <continent>...</continent>."
 #     ),
 #     .tags = c("country", "continent")
 #   )
+
+## -----------------------------------------------------------------------------
+# cities |>
+#   llm_mutate(
+#     geo = "Where is {city}? Give country and continent in their own tags.",
+#     .config = cfg_groq1,
+#     .tags = c("country", "continent"),
+#     .rows_per_prompt = 3
+#   )
+
+## -----------------------------------------------------------------------------
+# df <- data.frame(text = c("good", "bad", "fine"), stringsAsFactors = FALSE)
+# LLMR::llm_preview(df, prompt = "Sentiment of: {text}", .rows_per_prompt = 2)
+
+## ----eval=FALSE---------------------------------------------------------------
+# out <- df |>
+#   llm_mutate(sentiment = "One-word sentiment for: {text}", .config = cfg_groq)
+# 
+# llm_usage(out)       # counts + sent/received/total/reasoning tokens
+# llm_failures(out)    # which rows failed or were truncated, and why
 
 ## -----------------------------------------------------------------------------
 # schema2 <- list(
@@ -134,7 +153,7 @@ knitr::opts_chunk$set(
 #   llm_mutate_structured(
 #     annot,
 #     prompt  = "Extract category and a one-sentence rationale for: {text}",
-#     .config = cfg_gemini,
+#     .config = cfg_groq,
 #     .schema = schema2
 #     # Because a schema is present, fields auto-hoist; you can also pass:
 #     # .fields = c("category", "rationale")
@@ -142,11 +161,11 @@ knitr::opts_chunk$set(
 # 
 # df_s
 # 
-# # Or use shorthand (NEW in v0.6.2)
+# # Or use shorthand
 # df |>
 #   llm_mutate_structured(
 #     annot = "Extract category and rationale for: {text}",
-#     .config = cfg_gemini,
+#     .config = cfg_groq,
 #     .schema = schema2
 #   )
 

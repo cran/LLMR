@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>LLMR in 5 minutes</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">LLMR in 5 minutes</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>knitr<span class="sc">::</span>opts_chunk<span class="sc">$</span><span class="fu">set</span>(</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
+<p>LLMR gives R one interface to many language-model providers. You pick
+the provider and model once with <code>llm_config()</code>; every other
+function behaves the same regardless of which model is behind it.</p>
+<div id="install" class="section level2">
+<h2>1. Install</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">install.packages</span>(<span class="st">&quot;LLMR&quot;</span>)                   <span class="co"># CRAN</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co"># remotes::install_github(&quot;asanaei/LLMR&quot;)  # development version</span></span></code></pre></div>
+</div>
+<div id="set-an-api-key" class="section level2">
+<h2>2. Set an API key</h2>
+<p>You can hand <code>llm_config()</code> your key directly as a string,
+but the safer habit is to keep it out of your code and let LLMR read it
+from an environment variable. For each provider LLMR knows a default
+variable to look in: it tries <code>&lt;PROVIDER&gt;_API_KEY</code>
+first, then <code>&lt;PROVIDER&gt;_KEY</code> (upper-cased), so Groq
+reads <code>GROQ_API_KEY</code>, OpenAI reads
+<code>OPENAI_API_KEY</code>, and so on. If you set that variable, you
+never pass a key in code at all.</p>
+<p>Put the key in your <code>~/.Renviron</code> file, one per line:</p>
+<pre><code>GROQ_API_KEY=...</code></pre>
+<p>The easiest way to open that file is:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>usethis<span class="sc">::</span><span class="fu">edit_r_environ</span>()</span></code></pre></div>
+<p>Save it and <strong>restart R</strong>. You can check that R sees the
+key without printing it:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">nzchar</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;GROQ_API_KEY&quot;</span>))   <span class="co"># TRUE once it is set</span></span></code></pre></div>
+<p>If this is <code>FALSE</code>, R cannot see the key yet: check the
+spelling and that you restarted the session. A missing key shows up as
+an authentication error on your first call, not before.</p>
+</div>
+<div id="your-first-call" class="section level2">
+<h2>3. Your first call</h2>
+<p><code>llm_config()</code> selects the model; <code>call_llm()</code>
+sends one message and returns a response object that prints the text
+plus a short status line. We use Groq’s open-weight
+<code>gpt-oss-20b</code> here because it is cheap and available to
+everyone.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>, <span class="st">&quot;openai/gpt-oss-20b&quot;</span>, <span class="at">temperature =</span> <span class="fl">0.2</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="fu">c</span>(<span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>, <span class="at">user =</span> <span class="st">&quot;Capital of Mongolia?&quot;</span>))</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>r                 <span class="co"># prints the text and a [model | finish | tokens | t] line</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="fu">as.character</span>(r)   <span class="co"># just the text</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="fu">tokens</span>(r)         <span class="co"># token counts as a list</span></span></code></pre></div>
+<p>A message is a named character vector; the names are roles
+(<code>system</code>, <code>user</code>, <code>assistant</code>). A bare
+string is treated as a single user turn.</p>
+</div>
+<div id="apply-a-model-to-a-data-frame" class="section level2">
+<h2>4. Apply a model to a data frame</h2>
+<p><code>llm_mutate()</code> adds model-generated columns to a tibble.
+The shorthand puts the new column name and a <code>glue</code> prompt
+template in one argument; <code>{column}</code> is filled from each
+row.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(tibble)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>reviews <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">text =</span> <span class="fu">c</span>(<span class="st">&quot;The food was cold.&quot;</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>                           <span class="st">&quot;Absolutely loved it!&quot;</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>                           <span class="st">&quot;It was fine, nothing special.&quot;</span>))</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>reviews <span class="sc">|&gt;</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>    <span class="at">sentiment =</span> <span class="st">&quot;Reply with one word (positive/negative/neutral): {text}&quot;</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>    <span class="at">.config   =</span> cfg</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>  )</span></code></pre></div>
+<p>Alongside the <code>sentiment</code> column you also get diagnostic
+columns (<code>sentiment_ok</code>, <code>sentiment_finish</code>,
+<code>sentiment_sent</code>, <code>sentiment_rec</code>, …) so you can
+see what succeeded and how many tokens each row used.</p>
+</div>
+<div id="generative-calls-over-a-vector" class="section level2">
+<h2>5. Generative calls over a vector</h2>
+<p><code>llm_fn()</code> is the lighter-weight sibling of
+<code>llm_mutate()</code>: give it a vector and a <code>glue</code>
+prompt where <code>{x}</code> is each element, and it returns a
+character vector.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>countries <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;Mongolia&quot;</span>, <span class="st">&quot;Bolivia&quot;</span>, <span class="st">&quot;Chad&quot;</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">llm_fn</span>(countries,</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>       <span class="at">prompt  =</span> <span class="st">&quot;Capital city of {x}. Reply with only the city name.&quot;</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>       <span class="at">.config =</span> cfg)</span></code></pre></div>
+<p>Switching to a different provider or model is a one-line change to
+<code>llm_config()</code>; nothing else in your code changes.</p>
+</div>
+<div id="tagged-fields-and-row-batching" class="section level2">
+<h2>6. Tagged fields and row batching</h2>
+<p>When you want several fields per row, ask the model to wrap each in a
+named tag and pass <code>.tags</code>; LLMR parses them into columns.
+Add <code>.rows_per_prompt</code> to pack multiple rows into one request
+(sent as numbered <code>&lt;row_i&gt;</code> blocks and split back
+apart), which cuts the number of calls and the repeated instruction
+overhead.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>films <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">title =</span> <span class="fu">c</span>(<span class="st">&quot;Blade Runner&quot;</span>, <span class="st">&quot;Amelie&quot;</span>, <span class="st">&quot;Parasite&quot;</span>, <span class="st">&quot;Spirited Away&quot;</span>))</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>films <span class="sc">|&gt;</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>    <span class="at">info       =</span> <span class="st">&quot;For the film {title}, give its director and release year.&quot;</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>    <span class="at">.config    =</span> cfg,</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>    <span class="at">.tags      =</span> <span class="fu">c</span>(<span class="st">&quot;director&quot;</span>, <span class="st">&quot;year&quot;</span>),</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>    <span class="at">.rows_per_prompt =</span> <span class="dv">2</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>  )</span></code></pre></div>
+<p>The four films were resolved in two calls (<code>info_bn = 2</code>).
+The <code>info_batch</code>, <code>info_bn</code>, and
+<code>info_bi</code> columns record which call each row landed in and
+its position within it; the rows always come back in their original
+order. Prefer modest batch sizes and <code>temperature = 0</code>:
+batching only pays off when the model reliably follows the wrapping
+protocol.</p>
+</div>
+<div id="embeddings" class="section level2">
+<h2>7. Embeddings</h2>
+<p>Embeddings turn text into numeric vectors you can compare. They use a
+different kind of model, so you make a config with
+<code>embedding = TRUE</code>; here we use Voyage, which specializes in
+embeddings (set <code>VOYAGE_API_KEY</code>).
+<code>get_batched_embeddings()</code> takes a character vector and
+returns a matrix with one row per text.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>emb_cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;voyage&quot;</span>, <span class="st">&quot;voyage-3.5-lite&quot;</span>, <span class="at">embedding =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>texts <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;I love this restaurant.&quot;</span>,</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>           <span class="st">&quot;The food was delicious.&quot;</span>,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>           <span class="st">&quot;My car broke down today.&quot;</span>)</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>m <span class="ot">&lt;-</span> <span class="fu">get_batched_embeddings</span>(texts, emb_cfg)</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="fu">dim</span>(m)   <span class="co"># 3 texts x embedding dimension</span></span></code></pre></div>
+<p>Closeness in this space tracks meaning. Cosine similarity is high for
+the two sentences about food and low for the unrelated one:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>cosine <span class="ot">&lt;-</span> <span class="cf">function</span>(a, b) <span class="fu">sum</span>(a <span class="sc">*</span> b) <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">sum</span>(a <span class="sc">*</span> a) <span class="sc">*</span> <span class="fu">sum</span>(b <span class="sc">*</span> b))</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="fu">cosine</span>(m[<span class="dv">1</span>, ], m[<span class="dv">2</span>, ])   <span class="co"># food vs food: high</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="fu">cosine</span>(m[<span class="dv">1</span>, ], m[<span class="dv">3</span>, ])   <span class="co"># food vs car:  low</span></span></code></pre></div>
+</div>
+<div id="look-before-you-spend-summarize-after" class="section level2">
+<h2>8. Look before you spend, summarize after</h2>
+<p><code>llm_preview()</code> shows exactly what would be sent, with no
+API call, so you can catch a templating or role mistake before paying
+for it:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">llm_preview</span>(reviews,</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>            <span class="at">prompt  =</span> <span class="st">&quot;Reply with one word: {text}&quot;</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>            <span class="at">.config =</span> cfg)</span></code></pre></div>
+<p>After a run, <code>llm_usage()</code> summarizes token totals and
+outcomes, and <code>llm_failures()</code> lists any rows that failed or
+were truncated:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> reviews <span class="sc">|&gt;</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="fu">llm_mutate</span>(<span class="at">sentiment =</span> <span class="st">&quot;One word for: {text}&quot;</span>, <span class="at">.config =</span> cfg)</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="fu">llm_usage</span>(out)</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="fu">llm_failures</span>(out)</span></code></pre></div>
+</div>
+<div id="where-to-go-next" class="section level2">
+<h2>Where to go next</h2>
+<ul>
+<li><strong>Tidy pipelines and structured output</strong> –
+<code>llm_fn()</code>, <code>.tags</code>, JSON schemas, and row
+batching.</li>
+<li><strong>Schema-validated output</strong> – enforcing a JSON shape
+across providers.</li>
+<li><strong>Presidential speech analysis</strong> – a fuller embeddings
+example with clustering.</li>
+<li><strong>Small experiment</strong> – factorial designs and parallel
+execution with <code>call_llm_par()</code>.</li>
+<li><strong>Chat sessions</strong> – stateful multi-turn
+conversations.</li>
+</ul>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

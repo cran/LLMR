@@ -14,8 +14,8 @@ call_llm(config, messages, verbose = FALSE)
 
 \item{messages}{One of:
 \itemize{
-\item Plain character vector — each element becomes a \code{"user"} message.
-\item Named character vector — names are roles (\code{"system"}, \code{"user"},
+\item Plain character vector - each element becomes a \code{"user"} message.
+\item Named character vector - names are roles (\code{"system"}, \code{"user"},
 \code{"assistant"}). \strong{Multimodal shortcut:} include one or more
 elements named \code{"file"} whose values are local paths; consecutive
 \code{{user | file}} entries are combined into one user turn and files
@@ -48,16 +48,24 @@ retry once replacing \code{max_tokens} with \code{max_completion_tokens}
 "uncapped retry on empty content" is \emph{disabled} by default to
 avoid unexpected costs.
 \item \strong{Anthropic:} \code{max_tokens} is required; if omitted LLMR uses
-\code{2048} and warns. Multimodal images are inlined as base64. Extended
-thinking is supported: provide \code{thinking_budget} and
-\code{include_thoughts = TRUE} to include a \code{content} block of type
-\code{"thinking"} in the response; LLMR sets the beta header automatically.
+\code{2048} and warns. Multimodal images are inlined as base64 and PDFs
+as document blocks. Extended thinking is supported: provide
+\code{thinking_budget} (which must stay below \code{max_tokens}) and the
+response will carry \code{content} blocks of type \code{"thinking"}, also
+exposed as the \code{thinking} field of the result. Beta features can be
+requested by passing \code{anthropic_beta = "..."}, sent as the
+\code{anthropic-beta} header.
 \item \strong{Gemini (REST):} \code{systemInstruction} is supported; user
 parts use \code{text}/\code{inlineData(mimeType,data)}; responses are set to
 \code{responseMimeType = "text/plain"}. For Vertex AI, use
 \verb{provider = "gemini", vertex = TRUE, project = ...}.
 \item \strong{Ollama (local):} OpenAI-compatible endpoints on \verb{http://localhost:11434/v1/*};
 no Authorization header is required. Override with \code{api_url} as needed.
+\item \strong{Alibaba / Moonshot regions:} Defaults target the
+\emph{international} endpoints (\code{dashscope-intl.aliyuncs.com} and
+\code{api.moonshot.ai}). China-region accounts must pass \code{api_url} for the
+mainland hosts (\code{dashscope.aliyuncs.com} and \code{api.moonshot.cn});
+using the wrong region returns HTTP 401.
 \item \strong{Error handling:} HTTP errors raise structured conditions with
 classes like \code{llmr_api_param_error}, \code{llmr_api_rate_limit_error},
 \code{llmr_api_server_error}; see the condition fields for status, code,
@@ -96,13 +104,13 @@ as.character(r)
 finish_reason(r); tokens(r)
 
 ## 3) Anthropic extended thinking (single example)
+## max_tokens must cover the thinking budget plus the visible reply.
 a_cfg <- llm_config("anthropic", "claude-sonnet-4-6",
-                    max_tokens = 5000,
-                    thinking_budget = 16000,
-                    include_thoughts = TRUE)
+                    max_tokens = 20000,
+                    thinking_budget = 16000)
 r2 <- call_llm(a_cfg, "Compute 87*93 in your head. Give only the final number.")
-# thinking (if present): r2$raw$content[[1]]$thinking
-# final text:            r2$raw$content[[2]]$text
+# reasoning text: r2$thinking
+# final text:     as.character(r2)
 
 ## 4) Multimodal (named-vector shortcut)
 msg <- c(

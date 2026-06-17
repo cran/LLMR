@@ -1,20 +1,37 @@
 #' Declare an API key sourced from an environment variable
 #'
-#' Use this when creating an LLM config to avoid placing secrets
-#' inside R objects. Store your key in your shell or in `~/.Renviron`
-#' and reference it here by name.
+#' Reference an API key by the name of the environment variable that holds it,
+#' so the secret never appears in your R code or saved objects. Store the key in
+#' your shell profile or in `~/.Renviron` (e.g. `OPENAI_API_KEY=sk-...`).
 #'
-#' @param var Name of the environment variable (e.g., "OPENAI_API_KEY").
-#' @param required If TRUE, missing variables cause an authentication error at call time.
-#' @param default Optional default if the environment variable is not set.
-#' @return An internal secret handle to be used as `api_key = llm_api_key_env("VARNAME")`.
-#' @keywords internal
-#' @noRd
+#' Best practice is to not pass a key explicitly at all: [llm_config()] already
+#' looks up the standard variable for each provider (`<PROVIDER>_API_KEY`, then
+#' `<PROVIDER>_KEY`). Use `llm_api_key_env()` only when your variable has a
+#' non-standard name.
+#'
+#' @param var Name of the environment variable (e.g., "OPENAI_API_KEY"). A
+#'   character vector is also accepted; the variables are tried in order and the
+#'   first one that is set wins, which is convenient when a key may live under
+#'   more than one name (e.g., `c("GROQ_API_KEY", "GROQ_KEY")`).
+#' @param required If TRUE, a missing variable raises an authentication error at
+#'   call time. If FALSE, a missing variable resolves to an empty key, which is
+#'   appropriate for providers that do not require authentication (e.g., a local
+#'   Ollama server).
+#' @param default Optional default used if the environment variable is not set.
+#' @return A secret handle to pass as `api_key = llm_api_key_env("VARNAME")` in
+#'   [llm_config()].
+#' @seealso [llm_config()]
+#' @examples
+#' cfg <- llm_config(
+#'   "openai", "gpt-4o-mini",
+#'   api_key = llm_api_key_env("MY_OPENAI_KEY")
+#' )
+#' @export
 llm_api_key_env <- function(var, required = TRUE, default = NULL) {
   structure(
     list(
       kind     = "env",
-      ref      = as.character(var)[1],
+      ref      = as.character(var),
       required = isTRUE(required),
       default  = if (is.null(default)) NULL else as.character(default)[1]
     ),
@@ -22,51 +39,82 @@ llm_api_key_env <- function(var, required = TRUE, default = NULL) {
   )
 }
 
-# Internal: map providers to default environment variables for keys
+# Internal: default environment variables a provider's key may live in.
+# Formulaic: <PROVIDER>_API_KEY then <PROVIDER>_KEY, upper-cased. Both forms
+# are tried in order by .resolve_api_key(). (Gemini-on-Vertex is handled
+# upstream in llm_config(), which selects VERTEX_ACCESS_TOKEN before this.)
 #' @keywords internal
 #' @noRd
 .default_api_key_env <- function(provider) {
-  switch(tolower(provider),
-    openai    = "OPENAI_API_KEY",
-    anthropic = "ANTHROPIC_API_KEY",
-    gemini    = "GEMINI_API_KEY",
-    groq      = "GROQ_API_KEY",
-    together  = "TOGETHER_API_KEY",
-    voyage    = "VOYAGE_API_KEY",
-    deepseek  = "DEEPSEEK_API_KEY",
-    xai       = "XAI_API_KEY",
-    ollama    = "OLLAMA_API_KEY",
-    toupper(paste0(provider, "_API_KEY"))
-  )
+  stem <- toupper(provider)
+  c(paste0(stem, "_API_KEY"), paste0(stem, "_KEY"))
 }
 
 # Internal: resolve a secret handle or an env-spec string into a concrete key string
 #' @keywords internal
 #' @noRd
 .resolve_api_key <- function(secret, provider = NULL, model = NULL) {
-  # Back-compat: allow plain strings that name the variable, optionally with "env:" prefix
+  # Back-compat: configs saved by older LLMR versions stored a plain string here,
+  # either the name of an environment variable (optionally with an "env:" prefix)
+  # or the key itself.
   if (is.character(secret) && length(secret) == 1L) {
     var <- sub("^env:", "", secret)
-    val <- Sys.getenv(var, unset = "")
-    if (nzchar(val)) return(val)
-    .llmr_error(
-      message = sprintf(
-        "Missing API key. Set environment variable '%s' for provider '%s'%s.",
-        var, provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
-      ),
-      category = "auth"
-    )
+    looks_like_env <- grepl("^env:", secret) || grepl("^[A-Z][A-Z0-9_]*$", var)
+    if (looks_like_env) {
+      val <- Sys.getenv(var, unset = "")
+      if (nzchar(val)) return(val)
+      .llmr_error(
+        message = sprintf(
+          "Missing API key. Set environment variable '%s' for provider '%s'%s.",
+          var, provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
+        ),
+        category = "auth"
+      )
+    }
+    # Not env-shaped: this is a literal key from a legacy config. Use it, but
+    # never echo it in any message.
+    if (is.na(secret) || !nzchar(secret)) {
+      .llmr_error(
+        message = sprintf(
+          "Empty API key for provider '%s'. Set '%s' in your environment, or pass api_key = llm_api_key_env(\"VARNAME\").",
+          provider %||% "?",
+          paste(.default_api_key_env(provider %||% "PROVIDER"), collapse = "' or '")
+        ),
+        category = "auth"
+      )
+    }
+    return(secret)
+  }
+
+  if (inherits(secret, "llmr_secret_literal")) {
+    val <- secret$value
+    if (!is.character(val) || length(val) != 1L || is.na(val) || !nzchar(val)) {
+      .llmr_error(
+        message = sprintf(
+          "Empty or invalid literal API key for provider '%s'. Set '%s' in your environment, or pass api_key = llm_api_key_env(\"VARNAME\").",
+          provider %||% "?",
+          paste(.default_api_key_env(provider %||% "PROVIDER"), collapse = "' or '")
+        ),
+        category = "auth"
+      )
+    }
+    return(val)
   }
 
   if (inherits(secret, "llmr_secret_env")) {
-    var <- secret$ref
-    val <- Sys.getenv(var, unset = "")
-    if (nzchar(val)) return(val)
+    for (v in secret$ref) {
+      val <- Sys.getenv(v, unset = "")
+      if (nzchar(val)) return(val)
+    }
     if (!is.null(secret$default) && nzchar(secret$default)) return(secret$default)
+    # required = FALSE: a missing variable is acceptable (e.g. a provider that
+    # does not need a key, or optional auth). Return an empty string instead of
+    # raising an authentication error.
+    if (isFALSE(secret$required)) return("")
     .llmr_error(
       message = sprintf(
         "Missing API key. Set environment variable '%s' for provider '%s'%s.",
-        var, provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
+        paste(secret$ref, collapse = " or "), provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
       ),
       category = "auth"
     )
@@ -74,12 +122,14 @@ llm_api_key_env <- function(var, required = TRUE, default = NULL) {
 
   if (is.null(secret) && !is.null(provider)) {
     var <- .default_api_key_env(provider)
-    val <- Sys.getenv(var, unset = "")
-    if (nzchar(val)) return(val)
+    for (v in var) {
+      val <- Sys.getenv(v, unset = "")
+      if (nzchar(val)) return(val)
+    }
     .llmr_error(
       message = sprintf(
         "Missing API key. Set environment variable '%s' for provider '%s'%s.",
-        var, provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
+        paste(var, collapse=" or "), provider %||% "?", if (!is.null(model)) paste0(" (model '", model, "')") else ""
       ),
       category = "auth"
     )
@@ -92,7 +142,8 @@ llm_api_key_env <- function(var, required = TRUE, default = NULL) {
 #' @keywords internal
 #' @noRd
 .mask_api_key <- function(secret) {
-  if (inherits(secret, "llmr_secret_env")) return(paste0("<llmr_secret: env:", secret$ref, ">"))
+  if (inherits(secret, "llmr_secret_literal")) return("<llmr_secret: literal>")
+  if (inherits(secret, "llmr_secret_env")) return(paste0("<llmr_secret: env:", paste(secret$ref, collapse="|"), ">"))
   if (is.character(secret) && length(secret) == 1L) {
     if (grepl("^env:", secret)) return(paste0("<llmr_secret: ", secret, ">"))
     return("<llmr_secret: string>")

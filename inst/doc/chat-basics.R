@@ -7,56 +7,52 @@ knitr::opts_chunk$set(
 ## -----------------------------------------------------------------------------
 # library(LLMR)
 # 
-# cfg_openai <- llm_config(
-#   provider = "openai",
-#   model    = "gpt-5-nano",
-# 
+# cfg_ds <- llm_config(
+#   provider = "deepseek",
+#   model    = "deepseek-chat"
 # )
 # 
-# chat_oai <- chat_session(cfg_openai, system = "Be concise.")
-# chat_oai$send("Say a warm hello in one short sentence.")
-# chat_oai$send("Now say it in Esperanto.")
+# chat_ds <- chat_session(cfg_ds, system = "Be concise.")
+# chat_ds$send("Say a warm hello in one short sentence.")
+# chat_ds$send("Now say it in Esperanto.")
 
 ## -----------------------------------------------------------------------------
-# cfg_anthropic <- llm_config(
-#   provider = "anthropic",
-#   model    = "claude-sonnet-4-6",
-#   max_tokens = 512   # avoid warnings; Anthropic requires max_tokens
+# cfg_reason <- llm_config(
+#   provider = "deepseek",
+#   model    = "deepseek-reasoner"
 # )
 # 
-# chat_claude <- chat_session(cfg_anthropic, system = "Be concise.")
-# chat_claude$send("Name one interesting fact about honey bees.")
+# chat_reason <- chat_session(cfg_reason, system = "Be concise.")
+# chat_reason$send("Name one interesting fact about honey bees.")
 
 ## -----------------------------------------------------------------------------
-# cfg_gemini <- llm_config(
-#   provider = "gemini",
-#   model    = "gemini-2.5-flash-lite",
-# 
-# )
-# 
-# chat_gem <- chat_session(cfg_gemini, system = "Be concise.")
-# chat_gem$send("Give me a single-sentence fun fact about volcanoes.")
-
-## -----------------------------------------------------------------------------
-# cfg_groq <- llm_config(
+# cfg_groq1 <- llm_config(
 #   provider = "groq",
-#   model    = "openai/gpt-oss-20b",
-# 
+#   model    = "llama-3.1-8b-instant"
 # )
 # 
-# chat_groq <- chat_session(cfg_groq, system = "Be concise.")
-# chat_groq$send("Share a short fun fact about octopuses.")
+# chat_groq1 <- chat_session(cfg_groq1, system = "Be concise.")
+# chat_groq1$send("Give me a single-sentence fun fact about volcanoes.")
 
 ## -----------------------------------------------------------------------------
-# chat_oai$send("What did I ask you to do in my first message?")
+# cfg_groq2 <- llm_config(
+#   provider = "groq",
+#   model    = "openai/gpt-oss-20b"
+# )
+# 
+# chat_groq2 <- chat_session(cfg_groq2, system = "Be concise.")
+# chat_groq2$send("Share a short fun fact about octopuses.")
+
+## -----------------------------------------------------------------------------
+# chat_ds$send("What did I ask you to do in my first message?")
 # # The model can reference the earlier "Say a warm hello" request
 
 ## -----------------------------------------------------------------------------
 # # View all messages
-# as.data.frame(chat_oai)
+# as.data.frame(chat_ds)
 # 
 # # Get summary statistics
-# summary(chat_oai)
+# summary(chat_ds)
 
 ## -----------------------------------------------------------------------------
 # schema <- list(
@@ -69,7 +65,7 @@ knitr::opts_chunk$set(
 #   additionalProperties = FALSE
 # )
 # 
-# chat_oai$send_structured(
+# chat_ds$send_structured(
 #   "Return an answer and a confidence score (0-1) about: Why is the sky blue?",
 #   schema
 # )

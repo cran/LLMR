@@ -14,10 +14,15 @@ llm_mutate(
   .before = NULL,
   .after = NULL,
   .return = c("columns", "text", "object"),
+  .na_action = c("send", "skip", "error"),
   .structured = FALSE,
   .schema = NULL,
   .fields = NULL,
   .tags = NULL,
+  .rows_per_prompt = 1L,
+  .rowpack_payload = c("user", "system"),
+  .rowpack_recovery = c("halve_recursive", "halve_once", "singletons", "retry_same",
+    "none"),
   ...
 )
 }
@@ -49,7 +54,16 @@ generated column(s) are placed.}
 \item{.return}{One of \code{c("columns","text","object")}. For generative mode,
 controls how results are added. \code{"columns"} (default) adds text plus
 diagnostic columns; \code{"text"} adds a single text column; \code{"object"} adds a
-list-column of \code{llmr_response} objects.}
+list-column of \code{llmr_response} objects named \verb{<output>_obj}. Ignored (with
+a warning) when \code{.structured = TRUE} or \code{.tags} is supplied, which always
+return parsed columns.}
+
+\item{.na_action}{What to do with rows whose template references an \code{NA}
+value. \code{"send"} (default) renders \code{NA} as an empty string and sends the
+prompt anyway; \code{"skip"} does not call the API for those rows (the output
+column is \code{NA} and \code{finish_reason} is \code{"skipped"}); \code{"error"} stops before
+any call is made. With \code{.structured} or \code{.tags}, only \code{"send"} and
+\code{"error"} are available.}
 
 \item{.structured}{Logical. If \code{TRUE}, enables structured JSON output with automatic
 parsing. When enabled, this is equivalent to calling \code{\link[=llm_mutate_structured]{llm_mutate_structured()}}.
@@ -69,6 +83,22 @@ to \code{FALSE} to skip field extraction entirely.}
 such as \code{c("age", "job")}. When supplied, \code{\link[=llm_mutate]{llm_mutate()}} delegates to
 \code{\link[=llm_mutate_tags]{llm_mutate_tags()}} and adds \code{tags_ok}, \code{tags_data}, and one column per tag
 unless \code{.fields = FALSE}.}
+
+\item{.rows_per_prompt}{Integer scalar, or \code{Inf}. Number of rows packed into a
+single generative request. The default, \code{1}, sends one request per row (the
+historical behaviour). When greater than \code{1}, rows are grouped and sent in
+one call wrapped in numbered \verb{<row_1>...</row_1>} tags (see \emph{Row batching}
+below); \code{Inf} sends all rows at once. Works in generative, tag, and
+structured modes; not applicable to embedding configurations.}
+
+\item{.rowpack_payload}{One of \code{c("user","system")}. Channel to which the
+\verb{<row_i>} data block is appended when batching. The default \code{"user"} keeps a
+static system prompt cacheable; the imperative instruction is always placed
+in the system message.}
+
+\item{.rowpack_recovery}{How to handle rows a batched call leaves unresolved.
+One of \code{"halve_recursive"} (default), \code{"halve_once"}, \code{"singletons"},
+\code{"retry_same"}, or \code{"none"}; see \code{\link[=llm_fn]{llm_fn()}} for the precise meaning of each.}
 
 \item{...}{Passed to the underlying calls: \code{\link[=call_llm_broadcast]{call_llm_broadcast()}} in
 generative mode, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}} in embedding mode.}
@@ -93,8 +123,30 @@ count explicitly.
 Result expands to numeric columns named \verb{paste0(<output>, 1:N)}. If all rows
 fail to embed, a single \verb{<output>1} column of \code{NA} is returned.
 \item Diagnostic columns use suffixes: \verb{_finish}, \verb{_sent}, \verb{_rec}, \verb{_tot}, \verb{_reason}, \verb{_ok}, \verb{_err}, \verb{_id}, \verb{_status}, \verb{_ecode}, \verb{_param}, \verb{_t}.
+\item \strong{Row batching:} with \code{.rows_per_prompt > 1}, three further columns are added
+(\verb{_batch}, \verb{_bn}, \verb{_bi}: the batch identifier, the size of the resolving
+call, and the within-call position). They appear only when batching
+actually groups rows, so the default schema is unchanged at \code{.rows_per_prompt = 1}.
 }
 }
+\section{Row batching}{
+
+With \code{.rows_per_prompt > 1}, several rows travel in one generative request. LLMR
+wraps each row's prompt in a numbered tag, \verb{<row_1>...</row_1>},
+\verb{<row_2>...</row_2>}, and so on, appends that block to the message (see
+\code{.rowpack_payload}), and instructs the model to answer each item inside a
+matching numbered tag; the reply is split back into rows by those numbers.
+This also composes with \code{.tags} (each \verb{<row_i>} then wraps the requested field
+tags) and with \code{.structured = TRUE} (rows are returned as one JSON object
+\verb{\{"results":[\{"row":i, ...\}]\}}, de-multiplexed by the integer \code{row} field; a
+one-time warning notes that this relies on the model honouring the protocol
+and that strict provider-side schema validation is replaced by local parsing).
+Batching is most useful with capable models at \code{temperature = 0} and is a net
+loss when the model ignores the wrapping. Dropped, reordered, duplicated, or
+truncated rows are detected and re-issued per \code{.rowpack_recovery}; token counts
+are reported once per batch so that summing token columns stays correct.
+}
+
 \section{Shorthand}{
 
 You can supply the output column and prompt in one argument:
@@ -156,7 +208,7 @@ df |>
 
 # Multimodal: include an image path with role 'file'
 pics <- tibble::tibble(
-  img    = c("inst/extdata/cat.png", "inst/extdata/dog.jpg"),
+  img    = c("path/to/cat.png", "path/to/dog.jpg"),
   prompt = c("Describe the image.", "Describe the image.")
 )
 pics |>
@@ -229,5 +281,5 @@ cities |>
 \seealso{
 \code{\link[=llm_fn]{llm_fn()}}, \code{\link[=llm_mutate_structured]{llm_mutate_structured()}}, \code{\link[=llm_mutate_tags]{llm_mutate_tags()}},
 \code{\link[=llm_parse_structured_col]{llm_parse_structured_col()}}, \code{\link[=llm_parse_tags_col]{llm_parse_tags_col()}},
-\code{\link[=call_llm_broadcast]{call_llm_broadcast()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}
+\code{\link[=llm_parse_rowpack_tags]{llm_parse_rowpack_tags()}}, \code{\link[=call_llm_broadcast]{call_llm_broadcast()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}
 }

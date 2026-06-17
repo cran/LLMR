@@ -24,15 +24,40 @@ to JSON mime type; Anthropic only injects a tool when a schema is supplied.}
 \item{method}{One of c("auto","json_mode","tool_call"). "auto" chooses the best
 per provider. You rarely need to change this.}
 
-\item{strict}{Logical. Request strict validation when supported (OpenAI-compatible).}
+\item{strict}{Logical. Request strict validation when supported
+(OpenAI-compatible). Strict mode has formal requirements of its own:
+every object must set \code{additionalProperties: false} and list all its
+properties as required. LLMR fills those in automatically where your
+schema leaves them unspecified (your explicit settings are never
+overridden); pass \code{strict = FALSE} to send the schema verbatim.}
 }
 \value{
 Modified \code{llm_config}.
 }
 \description{
-Turn on structured output for a model configuration. Supports OpenAI‑compatible
-providers (OpenAI, Groq, Together, x.ai, DeepSeek), Anthropic, and Gemini.
+Turn on structured output for a model configuration. Supports OpenAI-compatible
+providers (OpenAI, Groq, Together, x.ai, DeepSeek, Xiaomi, Alibaba (Qwen), Zhipu,
+Moonshot), Anthropic, and Gemini.
 }
+\section{Server-side enforcement by provider}{
+
+OpenAI, Groq, Together, x.ai, and Ollama accept a strict \code{json_schema}
+response format. DeepSeek, Alibaba (Qwen), Zhipu, Moonshot, and Xiaomi
+accept only JSON-object mode; for them the supplied schema drives local
+parsing and validation, so the prompt itself should describe the desired
+fields. Anthropic enforcement runs through a forced tool call; Gemini
+through \code{responseJsonSchema}.
+}
+
+\section{Gemini}{
+
+A supplied schema is sent as \code{responseJsonSchema} (standard JSON Schema,
+supported by Gemini 2.5+ models) together with the JSON mime type. For an
+older model that rejects it, set \code{gemini_enable_response_schema = FALSE} in
+the config to fall back to JSON-mime-type-only mode (the reply is still
+parsed and can be validated locally).
+}
+
 \section{When to use tags instead}{
 
 For tasks where strict JSON schema is unnecessary or unsupported, consider

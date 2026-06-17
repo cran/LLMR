@@ -353,23 +353,21 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <code>call_llm_par()</code></li>
 <li>Comparing unstructured vs. structured output across providers</li>
 </ol>
-<p>The workflow is: <strong>design → parallel execution →
-analysis</strong></p>
+<p>The workflow builds a factorial design, runs the calls in parallel,
+and then analyzes the returned tibble.</p>
 <p>We will compare three configurations on two prompts, once
-unstructured and once with structured output. In choosing models, note
-that at the time of writing this vignette, Gemini models are not
-guaranteeing the schema output and is more likely to run into
-trouble.</p>
+unstructured and once with structured output. We use open models via
+DeepSeek and Groq to ensure fast and low-cost execution.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_openai <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;openai&quot;</span>,   <span class="st">&quot;gpt-5-nano&quot;</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>cfg_cld    <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>,<span class="st">&quot;claude-sonnet-4-6&quot;</span>, <span class="at">max_tokens =</span> <span class="dv">512</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_ds     <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;deepseek&quot;</span>, <span class="st">&quot;deepseek-chat&quot;</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>cfg_groq1  <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>,     <span class="st">&quot;llama-3.1-8b-instant&quot;</span>)</span>
 <span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>cfg_groq   <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>,     <span class="st">&quot;openai/gpt-oss-20b&quot;</span>)</span></code></pre></div>
 </div>
 <div id="build-a-factorial-design" class="section level2">
 <h2>Build a factorial design</h2>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>experiments <span class="ot">&lt;-</span> <span class="fu">build_factorial_experiments</span>(</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">configs       =</span> <span class="fu">list</span>(cfg_openai, cfg_cld, cfg_groq),</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">configs       =</span> <span class="fu">list</span>(cfg_ds, cfg_groq1, cfg_groq),</span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">user_prompts  =</span> <span class="fu">c</span>(<span class="st">&quot;Summarize in one sentence: The Apollo program.&quot;</span>,</span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>                    <span class="st">&quot;List two benefits of green tea.&quot;</span>),</span>
 <span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">system_prompts =</span> <span class="fu">c</span>(<span class="st">&quot;Be concise.&quot;</span>)</span>

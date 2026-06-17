@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Reproducibility and cost: logging, replication, caching, batch jobs</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Reproducibility and cost: logging,
+replication, caching, batch jobs</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>knitr<span class="sc">::</span>opts_chunk<span class="sc">$</span><span class="fu">set</span>(</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
+<p>A language model is an instrument, and instruments demand calibration
+records. Reviewers now ask, reasonably: which model, at which settings,
+on which date, with what prompt, how stable are the labels, and what did
+it cost? This article shows how LLMR answers each question with one or
+two lines of code. Examples run on the open-weight
+<code>gpt-oss-20b</code> served by Groq, so they are inexpensive to
+reproduce; set <code>GROQ_API_KEY</code> and
+<code>LLMR_RUN_VIGNETTES=true</code> to knit them live.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>, <span class="st">&quot;openai/gpt-oss-20b&quot;</span>, <span class="at">temperature =</span> <span class="dv">0</span>, <span class="at">seed =</span> <span class="dv">110</span>)</span></code></pre></div>
+<div id="an-audit-trail-for-every-call" class="section level2">
+<h2>1. An audit trail for every call</h2>
+<p><code>llm_log_enable()</code> starts a session-wide log: every call
+made through LLMR, whether by <code>call_llm()</code>,
+<code>llm_mutate()</code>, a parallel run, or a chat session, appends
+one JSON record with the full request, the reply, token usage, the
+served model version, the request id, and timing. The file is JSONL, so
+it can be archived as supplementary material and read back as a data
+frame.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>log_path <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">&quot;.jsonl&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">llm_log_enable</span>(log_path)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>r <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="st">&quot;In one word, the capital of Senegal?&quot;</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="fu">llm_log_disable</span>()</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>jsonlite<span class="sc">::</span><span class="fu">stream_in</span>(<span class="fu">file</span>(log_path), <span class="at">verbose =</span> <span class="cn">FALSE</span>)[</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  , <span class="fu">c</span>(<span class="st">&quot;provider&quot;</span>, <span class="st">&quot;model&quot;</span>, <span class="st">&quot;model_version&quot;</span>, <span class="st">&quot;finish_reason&quot;</span>, <span class="st">&quot;status&quot;</span>)]</span></code></pre></div>
+<p>Two details matter for sensitive projects. The log never contains API
+keys. And <code>llm_log_enable(path, include_messages = FALSE)</code>
+keeps only metadata, parameters, and usage, for prompts that must not
+leave the analysis machine in clear text.</p>
+</div>
+<div id="replication-and-reliability" class="section level2">
+<h2>2. Replication and reliability</h2>
+<p>A single model run is one draw from a stochastic process; treat
+repeated runs the way you treat multiple human coders.
+<code>llm_replicate()</code> collects the draws and
+<code>llm_agreement()</code> reports per-item majority labels along with
+the statistic reviewers ask for, Krippendorff’s alpha.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>reviews <span class="ot">&lt;-</span> tibble<span class="sc">::</span><span class="fu">tibble</span>(<span class="at">text =</span> <span class="fu">c</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="st">&quot;The course changed how I think.&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="st">&quot;Lectures were fine, assignments tedious.&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="st">&quot;A complete waste of an afternoon.&quot;</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>))</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>cfg_warm <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;groq&quot;</span>, <span class="st">&quot;openai/gpt-oss-20b&quot;</span>, <span class="at">temperature =</span> <span class="dv">1</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>reps <span class="ot">&lt;-</span> <span class="fu">llm_replicate</span>(</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>  reviews, sentiment,</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a>  <span class="at">prompt  =</span> <span class="st">&quot;Sentiment of &#39;{text}&#39;. Answer with exactly one word: positive, negative, or neutral.&quot;</span>,</span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a>  <span class="at">.config =</span> cfg_warm, <span class="at">.times =</span> <span class="dv">5</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>)</span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>ag <span class="ot">&lt;-</span> <span class="fu">llm_agreement</span>(reps, <span class="at">prefix =</span> <span class="st">&quot;sentiment&quot;</span>)</span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>ag</span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a>ag<span class="sc">$</span>by_row</span></code></pre></div>
+<p>Low alpha is itself a finding: the instrument disagrees with itself
+on this construct, and downstream estimates should carry that
+uncertainty rather than hide it.</p>
+</div>
+<div id="a-methods-paragraph-you-can-edit" class="section level2">
+<h2>3. A methods paragraph you can edit</h2>
+<p><code>llm_methods_text()</code> drafts the transparency paragraph
+from what a result frame actually records, marking anything unknown as
+unknown.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">call_llm_par</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="fu">build_factorial_experiments</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>    <span class="at">configs =</span> cfg,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>    <span class="at">user_prompts =</span> <span class="fu">c</span>(<span class="st">&quot;Classify: &#39;great work&#39;&quot;</span>, <span class="st">&quot;Classify: &#39;do better&#39;&quot;</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  )</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">llm_methods_text</span>(res, <span class="at">task =</span> <span class="st">&quot;to classify short feedback messages&quot;</span>))</span></code></pre></div>
+</div>
+<div id="what-did-it-cost" class="section level2">
+<h2>4. What did it cost?</h2>
+<p><code>llm_usage()</code> reports tokens, and tokens only, because
+bundled price tables go stale and then mislead silently. If you want
+money, hand it your own current prices (per million tokens) and it
+applies them, billing cached prompt tokens at the cached rate when your
+table has one:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">llm_usage</span>(res)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>my_prices <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">model  =</span> <span class="st">&quot;openai/gpt-oss-20b&quot;</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">input  =</span> <span class="fl">0.10</span>,   <span class="co"># $ per million input tokens; check your provider&#39;s page</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">output =</span> <span class="fl">0.50</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">cached =</span> <span class="fl">0.05</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="fu">llm_usage</span>(res, <span class="at">price_table =</span> my_prices)<span class="sc">$</span>cost_estimate</span></code></pre></div>
+</div>
+<div id="prompt-caching" class="section level2">
+<h2>5. Prompt caching</h2>
+<p>Annotation runs repeat a long instruction prefix thousands of times,
+which is exactly the shape prompt caches reward. OpenAI, DeepSeek, and
+Gemini cache long prefixes automatically; for Anthropic, add
+<code>cache = TRUE</code> to the config and LLMR marks the system prompt
+and tool definitions as cacheable. Either way, cached tokens show up in
+<code>tokens(x)$cached</code> and in the <code>cached_tokens</code>
+column that <code>llm_usage()</code> sums, so the saving is visible
+rather than assumed.</p>
+</div>
+<div id="batch-jobs-at-half-price" class="section level2">
+<h2>6. Batch jobs at half price</h2>
+<p>When results can wait (minutes to 24 hours), the provider batch APIs
+price tokens at roughly half the live rate. LLMR wraps them in three
+verbs, and the job object survives the R session:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>job <span class="ot">&lt;-</span> <span class="fu">llm_batch_submit</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  cfg,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="fu">c</span>(<span class="st">&quot;Classify: &#39;superb&#39;&quot;</span>, <span class="st">&quot;Classify: &#39;awful&#39;&quot;</span>, <span class="st">&quot;Classify: &#39;fine, I guess&#39;&quot;</span>),</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">state_path =</span> <span class="st">&quot;sentiment_batch.rds&quot;</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>)</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">llm_batch_status</span>(job)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co"># hours later, in a fresh session:</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>res_batch <span class="ot">&lt;-</span> <span class="fu">llm_batch_fetch</span>(<span class="st">&quot;sentiment_batch.rds&quot;</span>)</span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="fu">llm_usage</span>(res_batch)</span></code></pre></div>
+<p>The fetched tibble has the same diagnostic columns as a live
+<code>call_llm_par()</code> run, so
+<code>llm_parse_structured_col()</code>, <code>llm_usage()</code>, and
+<code>llm_failures()</code> work on it unchanged. Batch jobs are
+supported for OpenAI, Groq, Anthropic, and Gemini.</p>
+</div>
+<div id="seeds-versions-and-honest-limits" class="section level2">
+<h2>7. Seeds, versions, and honest limits</h2>
+<p>Pass <code>seed</code> in <code>llm_config()</code> and LLMR forwards
+it where the provider supports one. Treat it as a stabilizer, not a
+guarantee: providers update serving stacks behind fixed model names.
+That is why every response records <code>model_version</code>, the
+identifier the server reports having served, and why the audit log
+stores it per call. Determinism you cannot have; attribution you
+can.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

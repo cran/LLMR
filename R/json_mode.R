@@ -32,8 +32,9 @@
 
 #' Enable Structured Output (Provider-Agnostic)
 #'
-#' Turn on structured output for a model configuration. Supports OpenAI‑compatible
-#' providers (OpenAI, Groq, Together, x.ai, DeepSeek), Anthropic, and Gemini.
+#' Turn on structured output for a model configuration. Supports OpenAI-compatible
+#' providers (OpenAI, Groq, Together, x.ai, DeepSeek, Xiaomi, Alibaba (Qwen), Zhipu,
+#' Moonshot), Anthropic, and Gemini.
 #'
 #' @param config An [llm_config] object.
 #' @param schema A named list representing a JSON Schema.
@@ -42,8 +43,28 @@
 #' @param name Character. Schema/tool name for providers requiring one. Default "llmr_schema".
 #' @param method One of c("auto","json_mode","tool_call"). "auto" chooses the best
 #'   per provider. You rarely need to change this.
-#' @param strict Logical. Request strict validation when supported (OpenAI-compatible).
+#' @param strict Logical. Request strict validation when supported
+#'   (OpenAI-compatible). Strict mode has formal requirements of its own:
+#'   every object must set `additionalProperties: false` and list all its
+#'   properties as required. LLMR fills those in automatically where your
+#'   schema leaves them unspecified (your explicit settings are never
+#'   overridden); pass `strict = FALSE` to send the schema verbatim.
 #' @return Modified `llm_config`.
+#'
+#' @section Server-side enforcement by provider:
+#' OpenAI, Groq, Together, x.ai, and Ollama accept a strict `json_schema`
+#' response format. DeepSeek, Alibaba (Qwen), Zhipu, Moonshot, and Xiaomi
+#' accept only JSON-object mode; for them the supplied schema drives local
+#' parsing and validation, so the prompt itself should describe the desired
+#' fields. Anthropic enforcement runs through a forced tool call; Gemini
+#' through `responseJsonSchema`.
+#'
+#' @section Gemini:
+#' A supplied schema is sent as `responseJsonSchema` (standard JSON Schema,
+#' supported by Gemini 2.5+ models) together with the JSON mime type. For an
+#' older model that rejects it, set `gemini_enable_response_schema = FALSE` in
+#' the config to fall back to JSON-mime-type-only mode (the reply is still
+#' parsed and can be validated locally).
 #'
 #' @section When to use tags instead:
 #' For tasks where strict JSON schema is unnecessary or unsupported, consider
@@ -63,22 +84,37 @@ enable_structured_output <- function(config,
 
   mp <- config$model_params %||% list()
   prov <- config$provider
-  is_openai_compat <- prov %in% c("openai","groq","together","xai","deepseek")
+  is_openai_compat <- prov %in% c("openai","groq","together","xai","deepseek", "xiaomi", "alibaba", "zhipu", "moonshot", "ollama")
+  # Providers whose API enforces a json_schema response_format server-side.
+  # The others (DeepSeek, Alibaba, Zhipu, Moonshot, Xiaomi) reject the
+  # json_schema type outright; for them LLMR requests JSON-object mode and the
+  # schema is used for local parsing/validation, so describe the desired
+  # fields in your prompt.
+  schema_capable <- prov %in% c("openai", "groq", "together", "xai", "ollama")
 
   if (is_openai_compat) {
     # Prefer json_mode via response_format for structured output
     if (is.null(schema)) {
       mp$response_format <- list(type = "json_object")
-    } else {
+    } else if (schema_capable) {
+      # strict mode has formal requirements of its own (see .strict_harden);
+      # send the hardened schema, keep the user's original for local checks
+      sent_schema <- if (isTRUE(strict)) .strict_harden(schema) else schema
       mp$response_format <- list(
         type = "json_schema",
         json_schema = list(
           name   = as.character(name %||% "llmr_schema"),
-          schema = schema,
+          schema = sent_schema,
           strict = isTRUE(strict)
         )
       )
       mp$json_schema <- schema
+    } else {
+      mp$response_format <- list(type = "json_object")
+      mp$json_schema <- schema
+      .llmr_param_note(sprintf(
+        "%s does not accept a server-side json_schema; using JSON-object mode with local validation. Describe the desired fields in your prompt.",
+        prov))
     }
   } else if (identical(prov, "anthropic")) {
     if (!is.null(schema)) {
@@ -91,12 +127,17 @@ enable_structured_output <- function(config,
       mp$tools <- append(mp$tools %||% list(), list(tool))
       mp$tool_choice <- list(type = "tool", name = tool$name)
       mp$json_schema <- schema
+      # Remember which tool is ours so disable_structured_output() can remove
+      # it even when a custom `name` was used.
+      mp$llmr_schema_tool <- tool$name
     }
   } else if (identical(prov, "gemini")) {
     # Ask for JSON back
     mp$response_mime_type <- "application/json"
-    if (!is.null(schema) && isTRUE(mp$gemini_enable_response_schema)) {
-      mp$response_schema <- schema
+    if (!is.null(schema) && !isFALSE(mp$gemini_enable_response_schema)) {
+      # responseJsonSchema takes standard JSON Schema (Gemini 2.5+). Set
+      # gemini_enable_response_schema = FALSE on the config to skip it.
+      mp$response_json_schema <- schema
       mp$json_schema <- schema
     }
   }
@@ -123,23 +164,50 @@ disable_structured_output <- function(config) {
   # Gemini toggles
   mp$response_mime_type <- NULL
   mp$response_schema <- NULL
+  mp$response_json_schema <- NULL
 
-  # Anthropic: remove only our schema tool (by name), keep user tools
+  # Anthropic: remove only our schema tool (recorded name, or the default),
+  # keep user tools
+  ours <- mp$llmr_schema_tool %||% "llmr_schema"
   if (!is.null(mp$tools) && length(mp$tools)) {
     keep <- vapply(mp$tools, function(t) {
       nm <- t$name %||% ""
-      # keep if not our default name
-      !identical(nm, "llmr_schema")
+      !identical(nm, ours)
     }, logical(1))
     mp$tools <- mp$tools[keep]
+    if (!length(mp$tools)) mp$tools <- NULL
   }
   if (!is.null(mp$tool_choice) && identical(mp$tool_choice$type, "tool") &&
-      identical(mp$tool_choice$name %||% "", "llmr_schema")) {
+      identical(mp$tool_choice$name %||% "", ours)) {
     mp$tool_choice <- NULL
   }
+  mp$llmr_schema_tool <- NULL
 
   config$model_params <- mp
   config
+}
+
+# internal: harden a JSON Schema the way strict response_format modes demand.
+# OpenAI-protocol strict mode (OpenAI, Groq, ...) rejects schemas unless every
+# object sets additionalProperties: false and lists all its properties as
+# required. Fill those in where the user left them unspecified; never override
+# an explicit choice.
+.strict_harden <- function(s) {
+  if (!is.list(s)) return(s)
+  if (identical(s$type, "object")) {
+    if (is.null(s$additionalProperties)) s$additionalProperties <- FALSE
+    if (!is.null(s$properties) && length(s$properties)) {
+      if (is.null(s$required)) s$required <- as.list(names(s$properties))
+      s$properties <- lapply(s$properties, .strict_harden)
+    }
+  }
+  if (identical(s$type, "array") && !is.null(s$items)) {
+    s$items <- .strict_harden(s$items)
+  }
+  for (k in c("anyOf", "oneOf", "allOf")) {
+    if (!is.null(s[[k]])) s[[k]] <- lapply(s[[k]], .strict_harden)
+  }
+  s
 }
 
 # internal: recursively convert integer vectors to double
@@ -158,38 +226,43 @@ disable_structured_output <- function(config) {
   s
 }
 
-.largest_balanced_segment <- function(s, pattern = c("[{}]", "[\\[\\]]")) {
-  # returns substring for the larger of the two bracket types if available
-  best <- NULL
-  best_len <- -1L
-  for (pat in pattern) {
-    locs <- gregexpr(pat, s)[[1]]
-    if (locs[1] == -1) next
-    syms <- substring(s, locs, locs)
-    open <- if (pat == "[{}]") "{" else "["
-    close <- if (pat == "[{}]") "}" else "]"
+.largest_balanced_segment <- function(s, pattern = c("[{}]", "[][]")) {
+  # Returns the largest balanced {...} or [...] substring. The scan is
+  # string-aware: brackets inside JSON string values (e.g. {"note":"use {"})
+  # do not disturb the depth count. Quotes outside any open bracket are prose
+  # and are ignored.
+  chars <- strsplit(s, "", fixed = TRUE)[[1]]
+  n <- length(chars)
+  if (!n) return(NULL)
+  best_start <- NA_integer_; best_end <- NA_integer_; best_len <- -1L
+  for (br in list(c("{", "}"), c("[", "]"))) {
+    open <- br[1]; close <- br[2]
     depth <- 0L; start <- NA_integer_
-    for (i in seq_along(syms)) {
-      ch <- syms[i]
+    in_str <- FALSE; esc <- FALSE
+    for (i in seq_len(n)) {
+      ch <- chars[i]
+      if (in_str) {
+        if (esc) esc <- FALSE
+        else if (ch == "\\") esc <- TRUE
+        else if (ch == "\"") in_str <- FALSE
+        next
+      }
+      if (ch == "\"" && depth > 0L) { in_str <- TRUE; next }
       if (ch == open) {
-        if (depth == 0L) start <- locs[i]
+        if (depth == 0L) start <- i
         depth <- depth + 1L
-      } else if (ch == close) {
+      } else if (ch == close && depth > 0L) {
         depth <- depth - 1L
         if (depth == 0L && !is.na(start)) {
-          cand <- c(start, locs[i])
-          clen <- cand[2] - cand[1] + 1L
-          if (clen > best_len) {
-            best <- cand
-            best_len <- clen
-          }
+          clen <- i - start + 1L
+          if (clen > best_len) { best_start <- start; best_end <- i; best_len <- clen }
           start <- NA_integer_
         }
       }
     }
   }
-  if (is.null(best)) return(NULL)
-  substr(s, best[1], best[2])
+  if (is.na(best_start)) return(NULL)
+  substr(s, best_start, best_end)
 }
 
 #' Parse structured output emitted by an LLM
@@ -226,7 +299,7 @@ llm_parse_structured <- function(x, strict_only = FALSE, simplify = FALSE) {
   if (!is.null(out) && !is.list(out)) out <- NULL
   if (!is.null(out) || isTRUE(strict_only)) return(.coerce_int_to_double(out))
 
-  seg <- .largest_balanced_segment(s0, pattern = c("[{}]", "[\\[\\]]"))
+  seg <- .largest_balanced_segment(s0, pattern = c("[{}]", "[][]"))
   if (is.null(seg)) return(NULL)
   out <- tryCatch(jsonlite::fromJSON(seg, simplifyVector = simplify), error = function(e) NULL)
   # Enforce list-or-NULL on recovery path too
@@ -317,17 +390,34 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
     .data <- as.data.frame(.data, stringsAsFactors = FALSE)
   }
   n <- nrow(.data)
-  if (!length(fields)) fields <- character(0)
+  # `.fields = FALSE` means "no field extraction; keep only structured_data".
+  # length(FALSE) is 1L, so normalize it to an empty spec up front rather than
+  # letting the logical FALSE be treated as a one-element field name.
+  if (identical(fields, FALSE) || !length(fields)) fields <- character(0)
 
   out <- .data
+  # Snapshot the caller's columns: hoisted fields must never silently
+  # overwrite existing data (see .hoist_name below).
+  orig_names <- names(.data)
+  .hoist_name <- function(dest) {
+    nm <- paste0(prefix, dest)
+    if (nm %in% orig_names) {
+      nm2 <- make.unique(c(orig_names, nm), sep = "_")[length(orig_names) + 1L]
+      warning(sprintf(
+        "Column '%s' already exists; writing the hoisted field to '%s' instead. Use `prefix=` to control naming.",
+        nm, nm2))
+      nm2
+    } else nm
+  }
   if (!structured_col %in% names(.data)) {
     out$structured_ok   <- rep(FALSE, n)
     out$structured_data <- replicate(n, NULL, simplify = FALSE)
     if (length(fields)) {
       dest <- if (is.null(names(fields))) fields else names(fields)
-      for (f in dest) out[[paste0(prefix, f)]] <- rep(NA_character_, n)
+      for (f in dest) out[[.hoist_name(f)]] <- rep(NA_character_, n)
     }
-    return(out)
+    # Honor the always-tibble contract on this early-return path too.
+    return(if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(out) else out)
   }
 
   src <- .data[[structured_col]]
@@ -358,8 +448,11 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
   out$structured_ok   <- ok
   out$structured_data <- parsed
 
-  # Field extraction and typing
-  if (length(fields)) {
+  # Field extraction and typing. `.fields = FALSE` means "keep only the
+  # structured_data list-column"; without this guard, length(FALSE) == 1L would
+  # make us treat the logical FALSE as a one-element field spec. Mirrors the
+  # guard in tag mode (R/tags_mode.R).
+  if (!identical(fields, FALSE) && length(fields)) {
     src_paths <- unname(if (is.null(names(fields))) fields else fields)
     dest_names <- if (is.null(names(fields))) fields else names(fields)
 
@@ -372,6 +465,7 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
     for (k in seq_along(src_paths)) {
       path <- src_paths[[k]]
       dest <- dest_names[[k]]
+      dest_col <- .hoist_name(dest)
       raw_vals <- lapply(parsed, function(x) {
         if (is.null(x) || !is.list(x)) return(NULL)
         v <- if (grepl("^/|\\[|\\.", path)) {
@@ -388,7 +482,7 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
           !is.null(v) && !(is.atomic(v) && length(v) == 1L)
         }, logical(1)))
         if (non_scalar_present) {
-          out[[paste0(prefix, dest)]] <- raw_vals
+          out[[dest_col]] <- raw_vals
           next
         }
       }
@@ -454,7 +548,7 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
       vapply(vals, function(v) if (is.null(v)) NA_character_ else as.character(v), character(1))
     })
 
-      out[[paste0(prefix, dest)]] <- col
+      out[[dest_col]] <- col
     } # end fields loop
   }
   # Always return a tibble to play nicely with dplyr verbs
@@ -528,8 +622,26 @@ llm_fn_structured <- function(x,
                         .schema = NULL,
                         .fields = NULL,
                               .local_only = FALSE,
-                              .validate_local = TRUE) {
-  cfg <- if (isTRUE(.local_only) || is.null(.schema)) .config
+                              .validate_local = TRUE,
+                              .rows_per_prompt = 1L,
+                              .rowpack_payload = c("user", "system"),
+                              .rowpack_recovery = c("halve_recursive", "halve_once",
+                                                  "singletons", "retry_same", "none")) {
+  .batched <- .validate_rows_per_prompt(.rows_per_prompt)
+  .rowpack_payload  <- match.arg(.rowpack_payload)
+  .rowpack_recovery <- match.arg(.rowpack_recovery)
+
+  if (.batched) {
+    out2 <- .llm_structured_batched(
+      x = x, prompt = prompt, .config = .config, .system_prompt = .system_prompt,
+      .schema = .schema, .fields = .fields, .validate_local = .validate_local,
+      .rows_per_prompt = .rows_per_prompt, .rowpack_payload = .rowpack_payload,
+      .rowpack_recovery = .rowpack_recovery, dots = rlang::dots_list(...))
+    if (requireNamespace("tibble", quietly = TRUE)) return(tibble::as_tibble(out2))
+    return(out2)
+  }
+
+  cfg <- if (isTRUE(.local_only)) .config
          else enable_structured_output(.config, schema = .schema)
 
   out  <- llm_fn(x, prompt, .config = cfg, .system_prompt = .system_prompt, ..., .return = "columns")
@@ -561,13 +673,17 @@ llm_fn_structured <- function(x,
 #'     \item `NULL` (default): auto-extracts all top-level properties from `.schema`
 #'     \item `FALSE`: skip field extraction (keep only `structured_data` list-column)
 #'   }
+#' @param .validate_local If TRUE (default) and `.schema` is provided, each
+#'   parsed object is validated locally against the schema (requires the
+#'   `jsonvalidate` package), adding `structured_valid` and `structured_error`
+#'   columns, exactly as [llm_fn_structured()] does.
 #'
 #' @section Shorthand syntax:
 #' Like [llm_mutate()], this function supports shorthand syntax:
 #'
 #' \preformatted{
-#' df |> llm_mutate_structured(result = "{text}", .schema = schema)
-#' df |> llm_mutate_structured(result = c(system = "Be brief.", user = "{text}"), .schema = schema)
+#' df |> llm_mutate_structured(result = "{text}", .config = cfg, .schema = schema)
+#' df |> llm_mutate_structured(result = c(system = "Be brief.", user = "{text}"), .config = cfg, .schema = schema)
 #' }
 #'
 #' @seealso [llm_mutate()], [llm_fn_structured()], [enable_structured_output()],
@@ -583,6 +699,11 @@ llm_mutate_structured <- function(.data,
                             .after  = NULL,
                             .schema = NULL,
                             .fields = NULL,
+                            .validate_local = TRUE,
+                            .rows_per_prompt = 1L,
+                            .rowpack_payload = c("user", "system"),
+                            .rowpack_recovery = c("halve_recursive", "halve_once",
+                                                "singletons", "retry_same", "none"),
                             ...) {
   # Capture whether output was actually provided
   output_missing <- missing(output)
@@ -591,9 +712,29 @@ llm_mutate_structured <- function(.data,
   after_missing  <- missing(.after)
   # Capture dots for safe forwarding
   dots <- rlang::dots_list(...)
-  
-  # Build the config with structured output enabled
-  cfg_structured <- if (is.null(.schema)) .config else enable_structured_output(.config, schema = .schema)
+  .batched <- .validate_rows_per_prompt(.rows_per_prompt)
+  .rowpack_payload  <- match.arg(.rowpack_payload)
+  .rowpack_recovery <- match.arg(.rowpack_recovery)
+
+  if (.batched) {
+    if (!is.null(.messages))
+      stop("Structured batched mode supports `prompt`, not `.messages`, yet. ",
+           "Use .rows_per_prompt = 1, or pass a single `prompt`.", call. = FALSE)
+    out2 <- .llm_structured_batched(
+      prompt = prompt, .config = .config, .system_prompt = .system_prompt,
+      .schema = .schema, .fields = .fields, .validate_local = isTRUE(.validate_local),
+      .rows_per_prompt = .rows_per_prompt, .rowpack_payload = .rowpack_payload,
+      .rowpack_recovery = .rowpack_recovery, dots = dots,
+      data_df = .data,
+      output = if (output_missing) NULL else rlang::ensym(output),
+      .before = if (before_missing) NULL else .before,
+      .after  = if (after_missing) NULL else .after)
+    return(out2)
+  }
+
+  # Build the config with structured output enabled (schema = NULL still
+  # requests JSON-object mode, as documented)
+  cfg_structured <- enable_structured_output(.config, schema = .schema)
   
   # Call llm_mutate with or without output depending on whether shorthand is used
   if (output_missing) {
@@ -641,6 +782,11 @@ llm_mutate_structured <- function(.data,
   out2 <- llm_parse_structured_col(out,
                                    structured_col = output_name,
                                    fields = fields_auto)
+  # Validate locally, matching llm_fn_structured()'s behavior
+  if (!is.null(.schema) && isTRUE(.validate_local)) {
+    out2 <- llm_validate_structured_col(out2, schema = .schema,
+                                        structured_list_col = "structured_data")
+  }
   if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(out2) else out2
 }
 
@@ -680,23 +826,30 @@ call_llm_par_structured <- function(experiments, schema = NULL, .fields = NULL, 
     }
   }
 
-  # row-wise glue
+  # Row-wise glue: character messages are templated against the experiment's
+  # metadata columns ({colname} interpolation). Structured-output prompts
+  # often contain literal braces (example JSON); any string glue cannot parse
+  # is passed through verbatim instead of aborting the whole run.
   ex$messages <- lapply(seq_len(nrow(ex)), function(i) {
     msg   <- ex$messages[[i]]
     rowdf <- ex[i, setdiff(names(ex), c("config", "messages")), drop = FALSE]
     if (is.character(msg)) {
       nm  <- names(msg)
-      out <- vapply(msg, function(s) as.character(glue::glue_data(rowdf, s, .na = "")), "")
+      out <- vapply(msg, function(s) {
+        tryCatch(as.character(glue::glue_data(rowdf, s, .na = "")),
+                 error = function(e) s)
+      }, character(1), USE.NAMES = FALSE)
       if (!is.null(nm)) names(out) <- nm
       out
     } else msg
   })
 
   res <- call_llm_par(ex, ...)
-  # Default auto-hoist if user didn't provide fields but gave a schema (hoist all top-level props)
   fields_auto <- if (is.null(.fields) && !is.null(effective_schema)) .auto_fields_from_schema(effective_schema) else .fields
   out <- llm_parse_structured_col(res, structured_col = "response_text", fields = fields_auto, allow_list = TRUE)
-  if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(out) else out
+  out2 <- if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(out) else out
+  class(out2) <- unique(c("llmr_experiment", class(out2)))
+  out2
 }
 
 

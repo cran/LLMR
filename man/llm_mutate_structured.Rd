@@ -15,6 +15,11 @@ llm_mutate_structured(
   .after = NULL,
   .schema = NULL,
   .fields = NULL,
+  .validate_local = TRUE,
+  .rows_per_prompt = 1L,
+  .rowpack_payload = c("user", "system"),
+  .rowpack_recovery = c("halve_recursive", "halve_once", "singletons", "retry_same",
+    "none"),
   ...
 )
 }
@@ -58,6 +63,27 @@ Supports:
 \item \code{FALSE}: skip field extraction (keep only \code{structured_data} list-column)
 }}
 
+\item{.validate_local}{If TRUE (default) and \code{.schema} is provided, each
+parsed object is validated locally against the schema (requires the
+\code{jsonvalidate} package), adding \code{structured_valid} and \code{structured_error}
+columns, exactly as \code{\link[=llm_fn_structured]{llm_fn_structured()}} does.}
+
+\item{.rows_per_prompt}{Integer scalar, or \code{Inf}. Number of rows packed into a
+single generative request. The default, \code{1}, sends one request per row (the
+historical behaviour). When greater than \code{1}, rows are grouped and sent in
+one call wrapped in numbered \verb{<row_1>...</row_1>} tags (see \emph{Row batching}
+below); \code{Inf} sends all rows at once. Works in generative, tag, and
+structured modes; not applicable to embedding configurations.}
+
+\item{.rowpack_payload}{One of \code{c("user","system")}. Channel to which the
+\verb{<row_i>} data block is appended when batching. The default \code{"user"} keeps a
+static system prompt cacheable; the imperative instruction is always placed
+in the system message.}
+
+\item{.rowpack_recovery}{How to handle rows a batched call leaves unresolved.
+One of \code{"halve_recursive"} (default), \code{"halve_once"}, \code{"singletons"},
+\code{"retry_same"}, or \code{"none"}; see \code{\link[=llm_fn]{llm_fn()}} for the precise meaning of each.}
+
 \item{...}{Passed to the underlying calls: \code{\link[=call_llm_broadcast]{call_llm_broadcast()}} in
 generative mode, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}} in embedding mode.}
 }
@@ -69,8 +95,8 @@ Drop-in schema-first variant of \code{\link[=llm_mutate]{llm_mutate()}}. Produce
 Like \code{\link[=llm_mutate]{llm_mutate()}}, this function supports shorthand syntax:
 
 \preformatted{
-df |> llm_mutate_structured(result = "{text}", .schema = schema)
-df |> llm_mutate_structured(result = c(system = "Be brief.", user = "{text}"), .schema = schema)
+df |> llm_mutate_structured(result = "{text}", .config = cfg, .schema = schema)
+df |> llm_mutate_structured(result = c(system = "Be brief.", user = "{text}"), .config = cfg, .schema = schema)
 }
 }
 

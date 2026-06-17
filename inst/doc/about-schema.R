@@ -10,8 +10,8 @@ knitr::opts_chunk$set(
 # safe({
 #   library(LLMR)
 #   cfg <- llm_config(
-#     provider = "openai",                # try "groq" or "together" too
-#     model    = "gpt-4.1-nano",
+#     provider = "deepseek",
+#     model    = "deepseek-chat",
 #     temperature = 0
 #   )
 # 
@@ -43,7 +43,7 @@ knitr::opts_chunk$set(
 # 
 #   cfg <- llm_config(
 #     provider = "groq",
-#     model    = "openai/gpt-oss-20b",
+#     model    = "llama-3.1-8b-instant",
 #     temperature = 0
 #   )
 #   cfg_strict <- enable_structured_output(cfg, schema = schema, strict = TRUE)
@@ -73,11 +73,11 @@ knitr::opts_chunk$set(
 #     additionalProperties=FALSE
 #   )
 # 
-#   cfg <- llm_config("anthropic", "claude-sonnet-4-6", max_tokens = 512)
+#   cfg <- llm_config("deepseek", "deepseek-chat")
 #   cfg <- enable_structured_output(cfg, schema = schema, name = "llmr_schema")
 # 
 #   res <- call_llm(cfg, c(
-#     system = "Return only the tool result that matches the schema.",
+#     system = "Return only the JSON object that matches the schema.",
 #     user   = "Answer: capital of Japan; include confidence in [0,1]."
 #   ))
 # 
@@ -90,12 +90,19 @@ knitr::opts_chunk$set(
 #   library(LLMR)
 # 
 #   cfg <- llm_config(
-#     "gemini", "gemini-2.5-flash-lite",
-#     response_mime_type = "application/json"  # ask for JSON back
-#     # Optionally: gemini_enable_response_schema = TRUE, response_schema = <your JSON Schema>
+#     "groq", "openai/gpt-oss-20b"
 #   )
 # 
-#   res <- call_llm(cfg, c(
+#   schema <- list(
+#     type = "object",
+#     properties = list(name = list(type = "string"),
+#                       score = list(type = "number")),
+#     required = list("name", "score"),
+#     additionalProperties = FALSE
+#   )
+#   cfg_json <- enable_structured_output(cfg, schema = schema)
+# 
+#   res <- call_llm(cfg_json, c(
 #     system = "Reply as JSON only.",
 #     user   = "Produce fields name and score about 'MNIST'."
 #   ))
@@ -122,7 +129,7 @@ knitr::opts_chunk$set(
 ## ----eval=FALSE---------------------------------------------------------------
 # library(LLMR); library(dplyr)
 # 
-# cfg_with_schema = llm_config('openai','gpt-4.1-nano')
+# cfg_with_schema = llm_config('deepseek','deepseek-chat')
 # 
 # setup_llm_parallel(workers = 10)
 # 

@@ -4,7 +4,15 @@
 \alias{get_batched_embeddings}
 \title{Generate Embeddings in Batches}
 \usage{
-get_batched_embeddings(texts, embed_config, batch_size = 50, verbose = FALSE)
+get_batched_embeddings(
+  texts,
+  embed_config,
+  batch_size = 50,
+  verbose = FALSE,
+  tries = 5,
+  wait_seconds = 2,
+  backoff_factor = 3
+)
 }
 \arguments{
 \item{texts}{Character vector of texts to embed. If named, the names will be
@@ -12,9 +20,14 @@ used as row names in the output matrix.}
 
 \item{embed_config}{An \code{llm_config} object configured for embeddings.}
 
-\item{batch_size}{Integer. Number of texts to process in each batch. Default is 50.}
+\item{batch_size}{Integer. Number of texts to process in each batch. Default is 50.
+(Gemini's developer API embeds at most 100 texts per request; larger
+batches are split automatically.)}
 
-\item{verbose}{Logical. If TRUE, prints progress messages. Default is TRUE.}
+\item{verbose}{Logical. If TRUE, prints progress messages. Default is FALSE.}
+
+\item{tries, wait_seconds, backoff_factor}{Retry controls forwarded to
+\code{\link{call_llm_robust}} for each batch.}
 }
 \value{
 A numeric matrix where each row is an embedding vector for the corresponding text.
@@ -29,17 +42,31 @@ avoiding rate limits. This function calls \code{\link{call_llm_robust}} for each
 batch and stitches the results together and parses them (using \code{parse_embeddings}) to
 return a numeric matrix.
 }
+\section{Batching, chunking, and row packing}{
+
+"Batch" appears in three distinct senses in LLMR, and they are easy to keep
+apart once you note which path each belongs to. (1) The asynchronous provider
+Batch API (\code{\link[=llm_batch_submit]{llm_batch_submit()}} and friends) defers a whole job for later
+delivery at a reduced price; it is the only deferred path. (2) In the
+embedding path, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}}'s \code{batch_size} sets how many texts
+go in one synchronous embedding request, bounded by the provider's per-call
+limit. (3) In the generative path, the \code{.rows_per_prompt} argument here packs
+several data rows into one generative prompt and parses them back into rows.
+Senses (2) and (3) are synchronous and carry no discount; only (1) defers and
+costs less.
+}
+
 \examples{
 \dontrun{
   # Basic usage
   texts <- c("Hello world", "How are you?", "Machine learning is great")
   names(texts) <- c("greeting", "question", "statement")
 
+  # The key is read from the VOYAGE_API_KEY environment variable.
   embed_cfg <- llm_config(
     provider = "voyage",
     model = "voyage-3.5-lite",
-    embedding = TRUE,
-    api_key = Sys.getenv("VOYAGE_API_KEY")
+    embedding = TRUE
   )
 
   embeddings <- get_batched_embeddings(
@@ -52,4 +79,7 @@ return a numeric matrix.
 \seealso{
 \code{\link{llm_config}} to create the embedding configuration.
 \code{\link{parse_embeddings}} to convert the raw response to a numeric matrix.
+Here \code{batch_size} is embedding chunking, the synchronous sense; it is not the
+asynchronous provider Batch API (\code{\link{llm_batch_submit}}) nor the
+generative row packing of \code{\link{llm_mutate}} (\code{.rows_per_prompt}).
 }

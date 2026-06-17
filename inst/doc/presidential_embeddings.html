@@ -347,13 +347,16 @@ Embeddings</h1>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span>
 <span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>is_package_check <span class="ot">&lt;-</span> <span class="fu">nzchar</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;_R_CHECK_PACKAGE_NAME_&quot;</span>)) <span class="sc">||</span></span>
 <span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>  <span class="fu">nzchar</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;_R_CHECK_CRAN_INCOMING_&quot;</span>))</span>
-<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>run_llmr_vignette <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) <span class="sc">&amp;&amp;</span></span>
-<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a>  <span class="sc">!</span>is_package_check</span></code></pre></div>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co"># Run live embedding calls only when explicitly requested and never during a</span></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co"># package check (they cost money and need a Gemini key).</span></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a>run_llmr_vignette <span class="ot">&lt;-</span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>  <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) <span class="sc">&amp;&amp;</span></span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a>  <span class="sc">!</span>is_package_check</span></code></pre></div>
 <p>This vignette demonstrates how to use LLMR for embedding analysis of
 presidential inaugural speeches.</p>
 <p><strong>Note:</strong> This vignette requires a valid Gemini API key
 and never runs live API calls during package checks. To run it locally,
-set <code>LLMR_RUN_VIGNETTES=true</code> before rendering.**</p>
+set <code>LLMR_RUN_VIGNETTES=true</code> before rendering.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span></code></pre></div>
 <div id="prepare-the-text-data" class="section level2">
 <h2>Prepare the Text Data</h2>
@@ -419,7 +422,7 @@ addresses:</p>
 <span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a></span>
 <span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>  <span class="co"># Perform hierarchical clustering</span></span>
 <span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>  hc <span class="ot">&lt;-</span> <span class="fu">hclust</span>(dist_object, <span class="at">method =</span> <span class="st">&quot;ward.D2&quot;</span>)</span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>  <span class="fu">plot</span>(hc, <span class="at">main =</span> <span class="st">&quot;Clustering of Presidential Inaugural Speeches</span><span class="sc">\n</span><span class="st">(only beginning the paragraphs)&quot;</span>)</span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>  <span class="fu">plot</span>(hc, <span class="at">main =</span> <span class="st">&quot;Clustering of Presidential Inaugural Speeches</span><span class="sc">\n</span><span class="st">(opening excerpts)&quot;</span>)</span>
 <span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>} <span class="cf">else</span> {</span>
 <span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>  <span class="fu">message</span>(<span class="st">&quot;Set LLMR_RUN_VIGNETTES=true to run live embedding clustering.&quot;</span>)</span>
 <span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>}</span>

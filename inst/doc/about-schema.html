@@ -343,27 +343,21 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>knitr<span class="sc">::</span>opts_chunk<span class="sc">$</span><span class="fu">set</span>(</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) )</span></code></pre></div>
-<div id="tldr" class="section level2">
-<h2>TL;DR</h2>
-<ul>
-<li><strong>JSON mode</strong>: ask the model for “a JSON object.” Lower
-friction. Weak guarantees.<br />
-</li>
-<li><strong>Schema output</strong>: give a JSON Schema and request
-strict validation. Higher reliability <em>when the provider enforces
-it</em>.<br />
-</li>
-<li><strong>Reality</strong>: enforcement and request shapes differ
-across providers. Use <strong>defensive parsing</strong> and
-<strong>local validation</strong>.</li>
-</ul>
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p>JSON mode asks the model for a JSON object; it is easy to request but
+gives weak guarantees about shape. Schema output supplies a JSON Schema
+and requests strict validation, which is more reliable when the provider
+enforces it. Enforcement and request shapes differ across providers, so
+this vignette relies on defensive parsing and local validation rather
+than trusting any one provider’s guarantee.</p>
 <hr />
 </div>
 <div id="what-the-major-providers-actually-support" class="section level2">
 <h2>What the major providers actually support</h2>
 <ul>
 <li><p><strong>OpenAI-compatible (OpenAI, Groq, Together, x.ai,
-DeepSeek)</strong><br />
+DeepSeek, Alibaba/Qwen, Zhipu, Moonshot, Xiaomi)</strong><br />
 Chat Completions accept a <code>response_format</code> (e.g.,
 <code>{&quot;type&quot;:&quot;json_object&quot;}</code> or a JSON-Schema payload).
 Enforcement varies by provider but the interface is OpenAI-shaped.<br />
@@ -382,9 +376,12 @@ See <a href="https://platform.claude.com/docs/en/api/messages#tools">Anthropic
 Messages API: tools &amp; <code>input_schema</code></a></p></li>
 <li><p><strong>Google Gemini (REST)</strong><br />
 Set <code>responseMimeType = &quot;application/json&quot;</code> in
-<code>generationConfig</code> to request JSON. Some models also accept
-<strong><code>responseSchema</code></strong> for constrained JSON
-(model-dependent).<br />
+<code>generationConfig</code> to request JSON. Gemini 2.5+ models also
+accept <strong><code>responseJsonSchema</code></strong> (standard JSON
+Schema), which <code>enable_structured_output()</code> sends by default
+when you supply a schema; set
+<code>gemini_enable_response_schema = FALSE</code> in the config for an
+older model that rejects it.<br />
 See <a href="https://ai.google.dev/gemini-api/docs/">Gemini
 documentation</a> —</p></li>
 </ul>
@@ -442,7 +439,7 @@ list-columns.<br />
 <li><code>enable_structured_output()</code> flips the right provider
 switch (OpenAI-compat <code>response_format</code>, Anthropic
 <strong>tool + <code>input_schema</code></strong>, Gemini
-<code>responseMimeType</code>/<code>responseSchema</code>).</li>
+<code>responseMimeType</code> + <code>responseJsonSchema</code>).</li>
 </ul>
 <hr />
 </div>
@@ -458,8 +455,8 @@ providers)</h3>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">safe</span>({</span>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR)</span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>    <span class="at">provider =</span> <span class="st">&quot;openai&quot;</span>,                <span class="co"># try &quot;groq&quot; or &quot;together&quot; too</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;gpt-4.1-nano&quot;</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>    <span class="at">provider =</span> <span class="st">&quot;deepseek&quot;</span>,              </span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;deepseek-chat&quot;</span>,</span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>    <span class="at">temperature =</span> <span class="dv">0</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  )</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a></span>
@@ -502,7 +499,7 @@ Schema and (notably) expects <strong>all properties to be listed under
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a></span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a>    <span class="at">provider =</span> <span class="st">&quot;groq&quot;</span>,</span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;openai/gpt-oss-20b&quot;</span>,</span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>    <span class="at">model    =</span> <span class="st">&quot;llama-3.1-8b-instant&quot;</span>,</span>
 <span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a>    <span class="at">temperature =</span> <span class="dv">0</span></span>
 <span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a>  )</span>
 <span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a>  cfg_strict <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema, <span class="at">strict =</span> <span class="cn">TRUE</span>)</span>
@@ -529,9 +526,8 @@ properties</strong> are listed in the <code>required</code> array.
 Groq’s structured output implementation is stricter than OpenAI’s.</p>
 <hr />
 </div>
-<div id="anthropic-force-a-schema-via-a-tool-may-require-max_tokens" class="section level3">
-<h3>3) Anthropic: force a schema via a tool (may require
-<code>max_tokens</code>)</h3>
+<div id="deepseek-json-object-mode-with-local-validation" class="section level3">
+<h3>3) DeepSeek: JSON-object mode with local validation</h3>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">safe</span>({</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR)</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
@@ -541,41 +537,43 @@ Groq’s structured output implementation is stricter than OpenAI’s.</p>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>    <span class="at">additionalProperties=</span><span class="cn">FALSE</span></span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>  )</span>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;anthropic&quot;</span>, <span class="st">&quot;claude-sonnet-4-6&quot;</span>, <span class="at">max_tokens =</span> <span class="dv">512</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;deepseek&quot;</span>, <span class="st">&quot;deepseek-chat&quot;</span>)</span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema, <span class="at">name =</span> <span class="st">&quot;llmr_schema&quot;</span>)</span>
 <span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a></span>
 <span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  res <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="fu">c</span>(</span>
-<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>    <span class="at">system =</span> <span class="st">&quot;Return only the tool result that matches the schema.&quot;</span>,</span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>    <span class="at">system =</span> <span class="st">&quot;Return only the JSON object that matches the schema.&quot;</span>,</span>
 <span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>    <span class="at">user   =</span> <span class="st">&quot;Answer: capital of Japan; include confidence in [0,1].&quot;</span></span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>  ))</span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a></span>
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>  parsed <span class="ot">&lt;-</span> <span class="fu">llm_parse_structured</span>(res)</span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>  <span class="fu">str</span>(parsed)</span>
 <span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>})</span></code></pre></div>
-<blockquote>
-<p>Anthropic <em>requires</em> <code>max_tokens</code>; LLMR warns and
-defaults if you omit it.</p>
-</blockquote>
 <hr />
 </div>
-<div id="gemini-json-response-plus-optional-response-schema-on-supported-models" class="section level3">
-<h3>4) Gemini: JSON response (plus optional response schema on supported
-models)</h3>
+<div id="groq-another-structured-output-example" class="section level3">
+<h3>4) Groq: another structured output example</h3>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">safe</span>({</span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="fu">library</span>(LLMR)</span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a></span>
 <span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  cfg <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="st">&quot;gemini&quot;</span>, <span class="st">&quot;gemini-2.5-flash-lite&quot;</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>    <span class="at">response_mime_type =</span> <span class="st">&quot;application/json&quot;</span>  <span class="co"># ask for JSON back</span></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>    <span class="co"># Optionally: gemini_enable_response_schema = TRUE, response_schema = &lt;your JSON Schema&gt;</span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  )</span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>  res <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg, <span class="fu">c</span>(</span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>    <span class="at">system =</span> <span class="st">&quot;Reply as JSON only.&quot;</span>,</span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>    <span class="at">user   =</span> <span class="st">&quot;Produce fields name and score about &#39;MNIST&#39;.&quot;</span></span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>  ))</span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>  <span class="fu">str</span>(<span class="fu">llm_parse_structured</span>(res))</span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>})</span></code></pre></div>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="st">&quot;groq&quot;</span>, <span class="st">&quot;openai/gpt-oss-20b&quot;</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  )</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>    <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>    <span class="at">properties =</span> <span class="fu">list</span>(<span class="at">name =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;string&quot;</span>),</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>                      <span class="at">score =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;number&quot;</span>)),</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>    <span class="at">required =</span> <span class="fu">list</span>(<span class="st">&quot;name&quot;</span>, <span class="st">&quot;score&quot;</span>),</span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>    <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>  )</span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>  cfg_json <span class="ot">&lt;-</span> <span class="fu">enable_structured_output</span>(cfg, <span class="at">schema =</span> schema)</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>  res <span class="ot">&lt;-</span> <span class="fu">call_llm</span>(cfg_json, <span class="fu">c</span>(</span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>    <span class="at">system =</span> <span class="st">&quot;Reply as JSON only.&quot;</span>,</span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>    <span class="at">user   =</span> <span class="st">&quot;Produce fields name and score about &#39;MNIST&#39;.&quot;</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>  ))</span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>  <span class="fu">str</span>(<span class="fu">llm_parse_structured</span>(res))</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a>})</span></code></pre></div>
 <hr />
 </div>
 </div>
@@ -602,13 +600,13 @@ list-columns (set <code>allow_list = FALSE</code> to force scalars
 only).</p>
 <hr />
 </div>
-<div id="pro-tip-combine-with-parallel-execution" class="section level2">
-<h2>Pro tip: Combine with parallel execution</h2>
+<div id="parallel-execution-with-schema-validation" class="section level2">
+<h2>Parallel execution with schema validation</h2>
 <p>For production ETL workflows, combine schema validation with
 parallelization:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">library</span>(LLMR); <span class="fu">library</span>(dplyr)</span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>cfg_with_schema <span class="ot">=</span> <span class="fu">llm_config</span>(<span class="st">&#39;openai&#39;</span>,<span class="st">&#39;gpt-4.1-nano&#39;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>cfg_with_schema <span class="ot">=</span> <span class="fu">llm_config</span>(<span class="st">&#39;deepseek&#39;</span>,<span class="st">&#39;deepseek-chat&#39;</span>)</span>
 <span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  </span>
 <span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="fu">setup_llm_parallel</span>(<span class="at">workers =</span> <span class="dv">10</span>)</span>
 <span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a></span>

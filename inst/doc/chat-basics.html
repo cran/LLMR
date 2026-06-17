@@ -344,77 +344,73 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
-<p>This vignette shows basic chat usage with four providers and model
-names: - OpenAI: gpt-5-nano - Anthropic: claude-sonnet-4-6 - Gemini:
-gemini-2.5-flash-lite - Groq: openai/gpt-oss-20b</p>
+<p>This vignette shows basic chat usage with four models across two open
+providers: - DeepSeek: deepseek-chat - DeepSeek: deepseek-reasoner -
+Groq: llama-3.1-8b-instant - Groq: openai/gpt-oss-20b</p>
 <p>You will need API keys in these environment variables:
-OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.</p>
+DEEPSEEK_API_KEY, GROQ_API_KEY.</p>
 <p>To run these examples locally, set a local flag: -
 Sys.setenv(LLMR_RUN_VIGNETTES = “true”) - or add LLMR_RUN_VIGNETTES=true
 to ~/.Renviron</p>
-<div id="openai-gpt-5-nano" class="section level2">
-<h2>OpenAI: gpt-5-nano</h2>
+<div id="deepseek-deepseek-chat" class="section level2">
+<h2>DeepSeek: deepseek-chat</h2>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_openai <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;openai&quot;</span>,</span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;gpt-5-nano&quot;</span>,</span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  </span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>)</span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>chat_oai <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_openai, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Say a warm hello in one short sentence.&quot;</span>)</span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Now say it in Esperanto.&quot;</span>)</span></code></pre></div>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_ds <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;deepseek&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;deepseek-chat&quot;</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>)</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>chat_ds <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_ds, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>chat_ds<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Say a warm hello in one short sentence.&quot;</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>chat_ds<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Now say it in Esperanto.&quot;</span>)</span></code></pre></div>
 </div>
-<div id="anthropic-claude-sonnet-4-6" class="section level2">
-<h2>Anthropic: claude-sonnet-4-6</h2>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>cfg_anthropic <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;anthropic&quot;</span>,</span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;claude-sonnet-4-6&quot;</span>,</span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">max_tokens =</span> <span class="dv">512</span>   <span class="co"># avoid warnings; Anthropic requires max_tokens</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>)</span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>chat_claude <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_anthropic, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>chat_claude<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Name one interesting fact about honey bees.&quot;</span>)</span></code></pre></div>
+<div id="deepseek-deepseek-reasoner" class="section level2">
+<h2>DeepSeek: deepseek-reasoner</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>cfg_reason <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;deepseek&quot;</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;deepseek-reasoner&quot;</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>)</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>chat_reason <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_reason, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>chat_reason<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Name one interesting fact about honey bees.&quot;</span>)</span></code></pre></div>
 </div>
-<div id="gemini-gemini-2.5-flash-lite" class="section level2">
-<h2>Gemini: gemini-2.5-flash-lite</h2>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cfg_gemini <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;gemini&quot;</span>,</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;gemini-2.5-flash-lite&quot;</span>,</span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  </span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>)</span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>chat_gem <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_gemini, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>chat_gem<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Give me a single-sentence fun fact about volcanoes.&quot;</span>)</span></code></pre></div>
+<div id="groq-llama-3.1-8b-instant" class="section level2">
+<h2>Groq: llama-3.1-8b-instant</h2>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cfg_groq1 <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;groq&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;llama-3.1-8b-instant&quot;</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>)</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>chat_groq1 <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_groq1, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>chat_groq1<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Give me a single-sentence fun fact about volcanoes.&quot;</span>)</span></code></pre></div>
 </div>
 <div id="groq-openaigpt-oss-20b" class="section level2">
 <h2>Groq: openai/gpt-oss-20b</h2>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>cfg_groq <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>cfg_groq2 <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;groq&quot;</span>,</span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;openai/gpt-oss-20b&quot;</span>,</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  </span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>)</span>
-<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a></span>
-<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>chat_groq <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_groq, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>chat_groq<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Share a short fun fact about octopuses.&quot;</span>)</span></code></pre></div>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">model    =</span> <span class="st">&quot;openai/gpt-oss-20b&quot;</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>chat_groq2 <span class="ot">&lt;-</span> <span class="fu">chat_session</span>(cfg_groq2, <span class="at">system =</span> <span class="st">&quot;Be concise.&quot;</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>chat_groq2<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;Share a short fun fact about octopuses.&quot;</span>)</span></code></pre></div>
 </div>
 <div id="using-the-chat-history" class="section level2">
 <h2>Using the chat history</h2>
 <p>Chat sessions remember context automatically:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;What did I ask you to do in my first message?&quot;</span>)</span>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>chat_ds<span class="sc">$</span><span class="fu">send</span>(<span class="st">&quot;What did I ask you to do in my first message?&quot;</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co"># The model can reference the earlier &quot;Say a warm hello&quot; request</span></span></code></pre></div>
 </div>
 <div id="inspect-the-full-conversation" class="section level2">
 <h2>Inspect the full conversation</h2>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># View all messages</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">as.data.frame</span>(chat_oai)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">as.data.frame</span>(chat_ds)</span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
 <span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># Get summary statistics</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">summary</span>(chat_oai)</span></code></pre></div>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">summary</span>(chat_ds)</span></code></pre></div>
 </div>
-<div id="structured-chat-in-one-call-openai-example" class="section level2">
-<h2>Structured chat in one call (OpenAI example)</h2>
+<div id="structured-chat-in-one-call-deepseek-example" class="section level2">
+<h2>Structured chat in one call (DeepSeek example)</h2>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>schema <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;object&quot;</span>,</span>
 <span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">properties =</span> <span class="fu">list</span>(</span>
@@ -425,7 +421,7 @@ to ~/.Renviron</p>
 <span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>  <span class="at">additionalProperties =</span> <span class="cn">FALSE</span></span>
 <span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>)</span>
 <span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>chat_oai<span class="sc">$</span><span class="fu">send_structured</span>(</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>chat_ds<span class="sc">$</span><span class="fu">send_structured</span>(</span>
 <span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="st">&quot;Return an answer and a confidence score (0-1) about: Why is the sky blue?&quot;</span>,</span>
 <span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>  schema</span>
 <span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>)</span></code></pre></div>

@@ -14,17 +14,20 @@ knitr::opts_chunk$set(
 ```  
 
 
-## TL;DR
+## Overview
 
-- **JSON mode**: ask the model for “a JSON object.” Lower friction. Weak guarantees.  
-- **Schema output**: give a JSON Schema and request strict validation. Higher reliability *when the provider enforces it*.  
-- **Reality**: enforcement and request shapes differ across providers. Use **defensive parsing** and **local validation**.
+JSON mode asks the model for a JSON object; it is easy to request but gives
+weak guarantees about shape. Schema output supplies a JSON Schema and requests
+strict validation, which is more reliable when the provider enforces it.
+Enforcement and request shapes differ across providers, so this vignette
+relies on defensive parsing and local validation rather than trusting any one
+provider's guarantee.
 
 ---
 
 ## What the major providers actually support
 
-- **OpenAI-compatible (OpenAI, Groq, Together, x.ai, DeepSeek)**  
+- **OpenAI-compatible (OpenAI, Groq, Together, x.ai, DeepSeek, Alibaba/Qwen, Zhipu, Moonshot, Xiaomi)**  
   Chat Completions accept a `response_format` (e.g., `{"type":"json_object"}` or a JSON-Schema payload). Enforcement varies by provider but the interface is OpenAI-shaped.  
   See [OpenAI Structured Outputs cookbook](https://cookbook.openai.com/examples/structured_outputs_intro), [Groq API (OpenAI-compatible)](https://console.groq.com/docs/structured-outputs), [Together: OpenAI compatibility](https://docs.together.ai/docs/json-mode), [x.ai: OpenAI API schema](https://docs.x.ai/docs/guides/structured-outputs), [DeepSeek: OpenAI-compatible endpoint](https://api-docs.deepseek.com/guides/json_mode)
 
@@ -33,7 +36,7 @@ knitr::opts_chunk$set(
   See [Anthropic Messages API: tools & `input_schema`](https://platform.claude.com/docs/en/api/messages#tools)
 
 - **Google Gemini (REST)**  
-  Set `responseMimeType = "application/json"` in `generationConfig` to request JSON. Some models also accept **`responseSchema`** for constrained JSON (model-dependent).  
+  Set `responseMimeType = "application/json"` in `generationConfig` to request JSON. Gemini 2.5+ models also accept **`responseJsonSchema`** (standard JSON Schema), which `enable_structured_output()` sends by default when you supply a schema; set `gemini_enable_response_schema = FALSE` in the config for an older model that rejects it.  
   See [Gemini documentation](https://ai.google.dev/gemini-api/docs/)
 ---
 
@@ -61,7 +64,7 @@ knitr::opts_chunk$set(
 - `llm_parse_structured()` strips fences and extracts the **largest balanced** `{...}` or `[...]` before parsing.  
 - `llm_parse_structured_col()` hoists fields (supports dot/bracket paths and JSON Pointer) and keeps non-scalars as list-columns.  
 - `llm_validate_structured_col()` validates locally via **jsonvalidate (AJV)**.  
-- `enable_structured_output()` flips the right provider switch (OpenAI-compat `response_format`, Anthropic **tool + `input_schema`**, Gemini `responseMimeType`/`responseSchema`).
+- `enable_structured_output()` flips the right provider switch (OpenAI-compat `response_format`, Anthropic **tool + `input_schema`**, Gemini `responseMimeType` + `responseJsonSchema`).
 
 ---
 
@@ -79,8 +82,8 @@ safe <- function(expr) tryCatch(expr, error = function(e) {message("ERROR: ", e$
 safe({
   library(LLMR)
   cfg <- llm_config(
-    provider = "openai",                # try "groq" or "together" too
-    model    = "gpt-4.1-nano",
+    provider = "deepseek",              
+    model    = "deepseek-chat",
     temperature = 0
   )
 
@@ -123,7 +126,7 @@ safe({
 
   cfg <- llm_config(
     provider = "groq",
-    model    = "openai/gpt-oss-20b",
+    model    = "llama-3.1-8b-instant",
     temperature = 0
   )
   cfg_strict <- enable_structured_output(cfg, schema = schema, strict = TRUE)
@@ -150,7 +153,7 @@ If your key is set, you should see `structured_ok = TRUE`, `structured_valid = T
 
 ---
 
-### 3) Anthropic: force a schema via a tool (may require `max_tokens`)
+### 3) DeepSeek: JSON-object mode with local validation
 
 ```{r}
 safe({
@@ -162,11 +165,11 @@ safe({
     additionalProperties=FALSE
   )
 
-  cfg <- llm_config("anthropic", "claude-sonnet-4-6", max_tokens = 512)
+  cfg <- llm_config("deepseek", "deepseek-chat")
   cfg <- enable_structured_output(cfg, schema = schema, name = "llmr_schema")
 
   res <- call_llm(cfg, c(
-    system = "Return only the tool result that matches the schema.",
+    system = "Return only the JSON object that matches the schema.",
     user   = "Answer: capital of Japan; include confidence in [0,1]."
   ))
 
@@ -175,23 +178,28 @@ safe({
 })
 ```
 
-> Anthropic *requires* `max_tokens`; LLMR warns and defaults if you omit it.
-
 ---
 
-### 4) Gemini: JSON response (plus optional response schema on supported models)
+### 4) Groq: another structured output example
 
 ```{r}
 safe({
   library(LLMR)
 
   cfg <- llm_config(
-    "gemini", "gemini-2.5-flash-lite",
-    response_mime_type = "application/json"  # ask for JSON back
-    # Optionally: gemini_enable_response_schema = TRUE, response_schema = <your JSON Schema>
+    "groq", "openai/gpt-oss-20b"
   )
 
-  res <- call_llm(cfg, c(
+  schema <- list(
+    type = "object",
+    properties = list(name = list(type = "string"),
+                      score = list(type = "number")),
+    required = list("name", "score"),
+    additionalProperties = FALSE
+  )
+  cfg_json <- enable_structured_output(cfg, schema = schema)
+
+  res <- call_llm(cfg_json, c(
     system = "Reply as JSON only.",
     user   = "Produce fields name and score about 'MNIST'."
   ))
@@ -226,14 +234,14 @@ Works when outputs arrive fenced, with pre/post text, or when arrays sneak in. N
 
 ---
 
-## Pro tip: Combine with parallel execution
+## Parallel execution with schema validation
 
 For production ETL workflows, combine schema validation with parallelization:
 
 ```{r, eval=FALSE}
 library(LLMR); library(dplyr)
 
-cfg_with_schema = llm_config('openai','gpt-4.1-nano')
+cfg_with_schema = llm_config('deepseek','deepseek-chat')
   
 setup_llm_parallel(workers = 10)
 

@@ -5,7 +5,10 @@ knitr::opts_chunk$set(
 )
 is_package_check <- nzchar(Sys.getenv("_R_CHECK_PACKAGE_NAME_")) ||
   nzchar(Sys.getenv("_R_CHECK_CRAN_INCOMING_"))
-run_llmr_vignette <- identical(tolower(Sys.getenv("LLMR_RUN_VIGNETTES", "false")), "true") &&
+# Run live embedding calls only when explicitly requested and never during a
+# package check (they cost money and need a Gemini key).
+run_llmr_vignette <-
+  identical(tolower(Sys.getenv("LLMR_RUN_VIGNETTES", "false")), "true") &&
   !is_package_check
 
 ## ----setup--------------------------------------------------------------------
@@ -69,7 +72,7 @@ if (run_llmr_vignette) {
 
   # Perform hierarchical clustering
   hc <- hclust(dist_object, method = "ward.D2")
-  plot(hc, main = "Clustering of Presidential Inaugural Speeches\n(only beginning the paragraphs)")
+  plot(hc, main = "Clustering of Presidential Inaugural Speeches\n(opening excerpts)")
 } else {
   message("Set LLMR_RUN_VIGNETTES=true to run live embedding clustering.")
 }

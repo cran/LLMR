@@ -14,31 +14,29 @@ knitr::opts_chunk$set(
 )
 ```
 
-We will show both unstructured and structured pipelines, using four model names:
-- gpt-5-nano (OpenAI)
-- claude-sonnet-4-6 (Anthropic)
-- gemini-2.5-flash-lite (Gemini)
+We will show both unstructured and structured pipelines, using open models:
+- deepseek-chat (DeepSeek)
+- llama-3.1-8b-instant (Groq)
 - openai/gpt-oss-20b (Groq)
 
-You will need environment variables OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY.
+You will need environment variables DEEPSEEK_API_KEY and GROQ_API_KEY.
 
 ```{r}
 library(LLMR)
 library(dplyr)
 
-cfg_openai <- llm_config("openai",   "gpt-5-nano")
-cfg_cld    <- llm_config("anthropic","claude-sonnet-4-6", max_tokens = 512)  # avoid warnings; Anthropic requires max_tokens
-cfg_gemini <- llm_config("gemini",   "gemini-2.5-flash-lite")
-cfg_groq   <- llm_config("groq",     "openai/gpt-oss-20b")
+cfg_ds    <- llm_config("deepseek", "deepseek-chat")
+cfg_groq1 <- llm_config("groq",     "llama-3.1-8b-instant")
+cfg_groq  <- llm_config("groq",     "openai/gpt-oss-20b")
 ```
 
-## llm_fn: unstructured (OpenAI)
+## llm_fn: unstructured (DeepSeek)
 ```{r}
 words <- c("excellent", "awful", "fine")
 out <- llm_fn(
   words,
   prompt  = "Classify '{x}' as Positive, Negative, or Neutral.",
-  .config = cfg_openai,
+  .config = cfg_ds,
   .return = "columns"
 )
 out
@@ -49,13 +47,13 @@ out
 out_groq <- llm_fn(
   words,
   prompt  = "Classify '{x}' as Positive, Negative, or Neutral.",
-  .config = cfg_groq,
+  .config = cfg_groq1,
   .return = "columns"
 )
 out_groq
 ```
 
-## llm_fn_structured: schema-first (OpenAI)
+## llm_fn_structured: schema-first (DeepSeek)
 ```{r}
 schema <- list(
   type = "object",
@@ -70,14 +68,14 @@ schema <- list(
 out_s <- llm_fn_structured(
   x = words,
   prompt  = "Classify '{x}' as Positive, Negative, or Neutral with confidence.",
-  .config = cfg_openai,
+  .config = cfg_ds,
   .schema = schema,
   .fields = c("label", "score")
 )
 out_s
 ```
 
-## llm_mutate: unstructured (Anthropic)
+## llm_mutate: unstructured (Groq)
 ```{r}
 df <- tibble::tibble(
   id   = 1:3,
@@ -87,14 +85,14 @@ df <- tibble::tibble(
 df_u <- df |>
   llm_mutate(
     answer  = "Give a short category for: {text}",
-    .config = cfg_cld,
+    .config = cfg_groq,
     .return = "columns"
   )
 
 df_u
 ```
 
-## llm_mutate: shorthand syntax (NEW in v0.6.2)
+## llm_mutate: shorthand syntax
 
 The shorthand lets you combine output column and prompt in one argument:
 
@@ -102,9 +100,9 @@ The shorthand lets you combine output column and prompt in one argument:
 df |>
   llm_mutate(
     category = "Give a short category for: {text}",
-    .config = cfg_cld
+    .config = cfg_groq
   )
-# Equivalent to: llm_mutate(category, prompt = "Give...", .config = cfg_cld)
+# Equivalent to: llm_mutate(category, prompt = "Give...", .config = cfg_groq)
 ```
 
 Or with multi-turn messages:
@@ -116,13 +114,13 @@ df |>
       system = "You are a text classifier. One word only.",
       user = "Category for: {text}"
     ),
-    .config = cfg_openai
+    .config = cfg_ds
   )
 ```
 
-## llm_mutate with .structured flag (NEW in v0.6.2)
+## llm_mutate with .structured flag
 
-You can now enable structured output directly in `llm_mutate()` using `.structured = TRUE`:
+Enable structured output directly in `llm_mutate()` using `.structured = TRUE`:
 
 ```{r}
 schema <- list(
@@ -138,7 +136,7 @@ schema <- list(
 df |>
   llm_mutate(
     structured_result = "{text}",
-    .config = cfg_openai,
+    .config = cfg_ds,
     .structured = TRUE,
     .schema = schema
   )
@@ -149,7 +147,9 @@ This is equivalent to calling `llm_mutate_structured()` and supports all the sam
 ## Soft structured output with tags
 
 When a strict JSON schema is unnecessary, request simple XML-like tags and let
-LLMR parse them into columns. Tags should not be nested.
+LLMR parse them into columns. In the ordinary one-row-per-call mode below, tags
+should be flat (not nested); the row-batching mode further down deliberately
+introduces one level of nesting and is documented there.
 
 ```{r}
 cities <- tibble::tibble(city = c("Cairo", "Lima", "Seoul"))
@@ -157,7 +157,7 @@ cities <- tibble::tibble(city = c("Cairo", "Lima", "Seoul"))
 cities |>
   llm_mutate(
     geo = "Where is {city}? Give country and continent in their own tags.",
-    .config = cfg_groq,
+    .config = cfg_groq1,
     .system_prompt = paste(
       "Use XML tags to specify different parts of the answer, but do not nest tags.",
       "Return <country>...</country> and <continent>...</continent>."
@@ -169,7 +169,87 @@ cities |>
 The result includes `tags_ok`, `tags_data`, and one column per requested tag.
 Use `llm_parse_tags_col()` to parse an existing response column.
 
-## llm_mutate_structured: structured with shorthand (Gemini)
+## Row batching: many rows per call
+
+By default LLMR sends one request per row. With `.rows_per_prompt > 1`, several rows
+are packed into a single request: each row's prompt is wrapped in a numbered tag
+(`<row_1>...</row_1>`, `<row_2>...</row_2>`, ...), the block is appended to the
+message, and the model is asked to answer each item inside a matching numbered
+tag. LLMR splits the reply back into the original rows. `.rows_per_prompt = Inf` sends
+the whole frame in one call.
+
+```{r}
+cities |>
+  llm_mutate(
+    geo = "Where is {city}? Give country and continent in their own tags.",
+    .config = cfg_groq1,
+    .tags = c("country", "continent"),
+    .rows_per_prompt = 3
+  )
+```
+
+A few points worth keeping in mind:
+
+- **Two notions of "batch".** This generative row batching is unrelated to
+  `get_batched_embeddings()`, which splits many texts across several *embedding*
+  calls. The `.rows_per_prompt` argument applies only to generative calls.
+- **One level of nesting in tag mode.** Inside each `<row_i>` block the model
+  emits the requested field tags, so batched tag output is intentionally nested
+  one level. This is the opposite of the flat-tag guidance for single-row calls;
+  LLMR adjusts the instruction automatically.
+- **Structured output.** `.structured = TRUE` together with `.rows_per_prompt > 1`
+  asks for a single JSON object `{"results":[{"row":i, ...}]}` and maps each
+  element back by its integer `row`. It emits a one-time warning, because it
+  relies on the model following the protocol and replaces strict provider-side
+  schema validation with local parsing.
+- **Fault tolerance.** Rows that the model drops, reorders, duplicates, or
+  truncates are detected and re-issued according to `.rowpack_recovery` (by default
+  the unresolved rows are retried at half the batch size, recursively, down to
+  single rows). Unrecoverable rows are returned as `NA` with a diagnostic finish
+  reason.
+- **Cost.** Batching reduces the number of requests and the repeated system-prompt
+  overhead, but it only pays off when the model reliably follows the wrapping
+  protocol. Prefer capable models at `temperature = 0`, and modest batch sizes.
+- **Diagnostics.** When batching actually groups rows, `llm_mutate()` adds
+  `<col>_batch`, `<col>_bn`, and `<col>_bi` columns identifying the batch, its
+  size, and the row's position within it. Token counts and wall-clock duration
+  are attributed once per batch (on its first resolved row) so that summing
+  those columns is correct. One caveat: when a batch reply is entirely unusable
+  and its rows succeed only through recovery calls, the failed call's spend has
+  no successful row to land on, so sums can slightly undercount in
+  heavy-recovery runs.
+
+## Preview before you spend, summarize after
+
+`llm_preview()` renders exactly what `llm_fn()` / `llm_mutate()` would send,
+without any API call and without reading or encoding files. It flags problems
+up front: missing files, a `"file"` role combined with `.rows_per_prompt > 1`, an
+embedding config with row batching, and so on. The batch plan columns show how
+rows would be grouped into calls.
+
+```{r}
+df <- data.frame(text = c("good", "bad", "fine"), stringsAsFactors = FALSE)
+LLMR::llm_preview(df, prompt = "Sentiment of: {text}", .rows_per_prompt = 2)
+```
+
+After a run, `llm_usage()` summarizes outcomes and token totals, and
+`llm_failures()` lists the rows that failed or were truncated. Both read the
+diagnostic columns that `llm_mutate()` and `call_llm_par()` already produce.
+`llm_usage()` reports tokens, not dollars: multiply by your provider's current
+per-token prices yourself.
+
+```{r eval=FALSE}
+out <- df |>
+  llm_mutate(sentiment = "One-word sentiment for: {text}", .config = cfg_groq)
+
+llm_usage(out)       # counts + sent/received/total/reasoning tokens
+llm_failures(out)    # which rows failed or were truncated, and why
+```
+
+For a `call_llm_par()` result you can re-run only the failures with
+`llm_par_resume()`.
+
+## llm_mutate_structured: structured with shorthand (Groq)
 ```{r}
 schema2 <- list(
   type = "object",
@@ -186,7 +266,7 @@ df_s <- df |>
   llm_mutate_structured(
     annot,
     prompt  = "Extract category and a one-sentence rationale for: {text}",
-    .config = cfg_gemini,
+    .config = cfg_groq,
     .schema = schema2
     # Because a schema is present, fields auto-hoist; you can also pass:
     # .fields = c("category", "rationale")
@@ -194,11 +274,11 @@ df_s <- df |>
 
 df_s
 
-# Or use shorthand (NEW in v0.6.2)
+# Or use shorthand
 df |>
   llm_mutate_structured(
     annot = "Extract category and rationale for: {text}",
-    .config = cfg_gemini,
+    .config = cfg_groq,
     .schema = schema2
   )
 ```

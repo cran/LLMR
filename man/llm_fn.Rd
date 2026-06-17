@@ -10,7 +10,14 @@ llm_fn(
   .config,
   .system_prompt = NULL,
   ...,
-  .return = c("text", "columns", "object")
+  .tags = NULL,
+  .fields = NULL,
+  .return = c("text", "columns", "object"),
+  .na_action = c("send", "skip", "error"),
+  .rows_per_prompt = 1L,
+  .rowpack_payload = c("user", "system"),
+  .rowpack_recovery = c("halve_recursive", "halve_once", "singletons", "retry_same",
+    "none")
 )
 }
 \arguments{
@@ -26,22 +33,97 @@ columns (\code{{col}}); with a vector the placeholder is \code{{x}}.}
 \item{...}{Passed unchanged to \code{\link[=call_llm_broadcast]{call_llm_broadcast()}} (e.g. \code{tries},
 \code{progress}, \code{verbose}).}
 
+\item{.tags}{Optional character vector of XML-like tag names to request and parse.
+When supplied, delegates to \code{\link[=llm_fn_tags]{llm_fn_tags()}} for tag-based extraction.}
+
+\item{.fields}{Optional field selector for tag extraction (see \code{\link[=llm_fn_tags]{llm_fn_tags()}}).}
+
 \item{.return}{One of \code{c("text","columns","object")}. \code{"columns"}
 returns a tibble of diagnostic columns; \code{"text"} returns a character
 vector; \code{"object"} returns a list of \code{llmr_response} (or \code{NA} on failure).}
+
+\item{.na_action}{What to do with elements whose template references an \code{NA}
+value. \code{"send"} (default) renders \code{NA} as an empty string and sends the
+prompt anyway; \code{"skip"} does not call the API for those elements and
+returns \code{NA} for them (\code{finish_reason = "skipped"} in column mode);
+\code{"error"} stops before any call is made. \code{"skip"}/\code{"error"} are not
+available together with \code{.tags}.}
+
+\item{.rows_per_prompt}{Integer scalar, or \code{Inf}. Number of input elements packed
+into a single generative request. The default, \code{1}, sends one request per
+element (the historical behaviour). When greater than \code{1}, elements are
+grouped and transmitted in one call wrapped in numbered
+\verb{<row_1>...</row_1>} tags (see \emph{Row batching} below); \code{Inf} sends all
+elements in a single call. Ignored for embedding configurations, which use
+\code{\link[=get_batched_embeddings]{get_batched_embeddings()}} instead.}
+
+\item{.rowpack_payload}{One of \code{c("user","system")}. Channel to which the
+\verb{<row_i>} data block is appended when batching. The imperative instruction
+is always placed in the system message; this argument controls only where
+the data goes. The default, \code{"user"}, keeps a static system prompt
+cacheable.}
+
+\item{.rowpack_recovery}{How to handle rows that a batched call leaves
+unresolved (dropped, malformed, or truncated). One of:
+\describe{
+\item{\code{"halve_recursive"}}{(default) re-issue the unresolved rows at half
+the batch size, recursing down to single rows.}
+\item{\code{"halve_once"}}{re-issue at half the batch size exactly once, then
+give up on any still-unresolved rows.}
+\item{\code{"singletons"}}{re-issue each unresolved row on its own.}
+\item{\code{"retry_same"}}{re-issue the failed batch once at the same size.}
+\item{\code{"none"}}{do not recover; unresolved rows are returned as \code{NA}.}
+}
+Recovery is bounded by an internal call budget so it always terminates.}
 }
 \value{
 For generative mode:
 \itemize{
 \item \code{.return = "text"}: character vector
 \item \code{.return = "columns"}: tibble with diagnostics
-\item \code{.return = "object"}: list of \code{llmr_response} (or \code{NA} on failure)
+\item \code{.return = "object"}: list of \code{llmr_response} (or \code{NA} on failure;
+unavailable when \code{.rows_per_prompt > 1})
 For embedding mode, always a numeric matrix.
 }
 }
 \description{
 Apply an LLM prompt over vectors/data frames
 }
+\section{Batching, chunking, and row packing}{
+
+"Batch" appears in three distinct senses in LLMR, and they are easy to keep
+apart once you note which path each belongs to. (1) The asynchronous provider
+Batch API (\code{\link[=llm_batch_submit]{llm_batch_submit()}} and friends) defers a whole job for later
+delivery at a reduced price; it is the only deferred path. (2) In the
+embedding path, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}}'s \code{batch_size} sets how many texts
+go in one synchronous embedding request, bounded by the provider's per-call
+limit. (3) In the generative path, the \code{.rows_per_prompt} argument here packs
+several data rows into one generative prompt and parses them back into rows.
+Senses (2) and (3) are synchronous and carry no discount; only (1) defers and
+costs less.
+}
+
+\section{Row packing}{
+
+With \code{.rows_per_prompt > 1}, several input elements travel in one generative
+request: LLMR wraps each element's prompt in a numbered tag,
+\verb{<row_1>...</row_1>}, \verb{<row_2>...</row_2>}, and so on, appends that block to
+the message (see \code{.rowpack_payload}), and instructs the model to answer each
+item inside a matching numbered tag. The reply is split back into the
+original elements by those numbers. Batching trades a smaller number of
+(larger) requests for some dependence on the model following the protocol; it
+is most useful with capable models at \code{temperature = 0}, and it is a net loss
+when the model ignores the wrapping. Results are deterministic given the
+model's outputs: partitioning and parsing add no randomness. Rows the model
+drops, reorders, duplicates, or truncates are detected and re-issued
+according to \code{.rowpack_recovery}. Because a batch shares one underlying call,
+token counts are reported once per batch (on its first resolved row, \code{NA}
+elsewhere), as is the wall-clock duration, so that summing those columns is
+correct. When a batch reply is entirely unusable and its rows succeed only
+through recovery calls, the failed call's spend has no successful row to
+land on, so sums can slightly undercount in heavy-recovery runs.
+}
+
 \examples{
 \dontrun{
 words <- c("excellent", "awful")
@@ -53,6 +135,7 @@ llm_fn(df, "Classify '{text}' from {source}.", cfg, .return = "columns")
 }
 }
 \seealso{
-\code{\link[=llm_mutate]{llm_mutate()}}, \code{\link[=llm_fn_structured]{llm_fn_structured()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}},
-\code{\link[=call_llm_broadcast]{call_llm_broadcast()}}, \code{\link[=get_batched_embeddings]{get_batched_embeddings()}}
+\code{\link[=llm_mutate]{llm_mutate()}}, \code{\link[=llm_fn_structured]{llm_fn_structured()}}, \code{\link[=llm_fn_tags]{llm_fn_tags()}},
+\code{\link[=llm_parse_rowpack_tags]{llm_parse_rowpack_tags()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}, \code{\link[=call_llm_broadcast]{call_llm_broadcast()}},
+\code{\link[=get_batched_embeddings]{get_batched_embeddings()}}
 }
