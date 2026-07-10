@@ -4,6 +4,8 @@
 \alias{llm_log_enable}
 \alias{llm_log_disable}
 \alias{llm_log_status}
+\alias{llm_log_active}
+\alias{llm_log_merge}
 \title{Record every LLM call in a local audit log}
 \usage{
 llm_log_enable(path = "llmr_log.jsonl", include_messages = TRUE)
@@ -11,10 +13,15 @@ llm_log_enable(path = "llmr_log.jsonl", include_messages = TRUE)
 llm_log_disable()
 
 llm_log_status()
+
+llm_log_active()
+
+llm_log_merge(path)
 }
 \arguments{
-\item{path}{File path for the log. Created on first write; appended to if
-it exists, so one file can accumulate a whole project's calls.}
+\item{path}{File path for the log. For \code{llm_log_enable()}, created on first
+write and appended to if it exists; for \code{llm_log_merge()}, the base log
+path whose per-process shard files should be folded in.}
 
 \item{include_messages}{Logical. If \code{TRUE} (default), the request body and
 the reply text are stored. If \code{FALSE}, only metadata is stored.}
@@ -23,6 +30,10 @@ the reply text are stored. If \code{FALSE}, only metadata is stored.}
 \code{llm_log_enable()} and \code{llm_log_disable()} return the previous log
 path invisibly. \code{llm_log_status()} returns the active path or \code{NULL},
 invisibly, after printing a one-line status.
+
+\code{llm_log_active()} returns a list with \code{active} (logical), \code{path}
+(the destination or \code{NULL}), and \code{include_messages} (logical), for code that
+needs to read the logging state without printing.
 }
 \description{
 \code{llm_log_enable()} turns on a session-wide audit log: each API call made
@@ -54,10 +65,11 @@ and wall-clock seconds.
 message.
 }
 
-Records are appended line by line; under parallel execution all workers
-append to the same file. Each line is one complete record, so interleaving
-across workers is harmless. The log contains your prompts and the model's
-replies in clear text. It never contains API keys.
+Records are appended line by line. Under multisession parallel execution,
+workers write per-process shard files and \code{\link[=llm_log_merge]{llm_log_merge()}} folds those
+shards back into the main log after the parallel call completes. The log
+contains your prompts and the model's replies in clear text. It never
+contains API keys.
 
 Set \code{include_messages = FALSE} to omit request bodies and reply text
 (keeping only metadata, parameters, usage, and identifiers), e.g. when

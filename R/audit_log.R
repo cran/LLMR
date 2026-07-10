@@ -38,17 +38,19 @@
 #' - Failed calls are logged too (`kind = "error"`), with the provider's error
 #'   message.
 #'
-#' Records are appended line by line; under parallel execution all workers
-#' append to the same file. Each line is one complete record, so interleaving
-#' across workers is harmless. The log contains your prompts and the model's
-#' replies in clear text. It never contains API keys.
+#' Records are appended line by line. Under multisession parallel execution,
+#' workers write per-process shard files and [llm_log_merge()] folds those
+#' shards back into the main log after the parallel call completes. The log
+#' contains your prompts and the model's replies in clear text. It never
+#' contains API keys.
 #'
 #' Set `include_messages = FALSE` to omit request bodies and reply text
 #' (keeping only metadata, parameters, usage, and identifiers), e.g. when
 #' prompts contain confidential data.
 #'
-#' @param path File path for the log. Created on first write; appended to if
-#'   it exists, so one file can accumulate a whole project's calls.
+#' @param path File path for the log. For `llm_log_enable()`, created on first
+#'   write and appended to if it exists; for `llm_log_merge()`, the base log
+#'   path whose per-process shard files should be folded in.
 #' @param include_messages Logical. If `TRUE` (default), the request body and
 #'   the reply text are stored. If `FALSE`, only metadata is stored.
 #' @return `llm_log_enable()` and `llm_log_disable()` return the previous log
@@ -99,6 +101,76 @@ llm_log_status <- function() {
   invisible(p)
 }
 
+#' @rdname llm_log_enable
+#' @export
+#' @return `llm_log_active()` returns a list with `active` (logical), `path`
+#'   (the destination or `NULL`), and `include_messages` (logical), for code that
+#'   needs to read the logging state without printing.
+llm_log_active <- function() {
+  p <- getOption("llmr.log_file")
+  list(
+    active           = !is.null(p),
+    path             = p,
+    include_messages = isTRUE(getOption("llmr.log_messages", TRUE))
+  )
+}
+
+#' @rdname llm_log_enable
+#' @export
+llm_log_merge <- function(path) {
+  .llmr_log_merge(path)
+}
+
+# Escape a file basename so it can be matched literally inside list.files().
+.llmr_re_escape <- function(x) {
+  gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+}
+
+.llmr_log_shard_path <- function(path, pid = Sys.getpid()) {
+  paste0(path, ".", pid)
+}
+
+.llmr_log_path <- function(path) {
+  if (isTRUE(getOption("llmr.log_parallel", FALSE))) {
+    return(.llmr_log_shard_path(path))
+  }
+  path
+}
+
+.llmr_log_merge <- function(path) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
+    rlang::abort("`path` must be a single non-empty file path.")
+  }
+
+  log_dir <- dirname(path)
+  if (!dir.exists(log_dir)) return(invisible(character()))
+
+  shard_pattern <- paste0("^", .llmr_re_escape(basename(path)), "\\.[0-9]+$")
+  shard_names <- sort(list.files(log_dir, pattern = shard_pattern))
+  if (!length(shard_names)) return(invisible(character()))
+
+  # Rebuild the shard path exactly as the writer formed it (base path + suffix),
+  # so the return value matches `.llmr_log_shard_path()` regardless of how
+  # list.files() normalizes separators (Windows returns forward slashes).
+  shards <- paste0(path, ".", sub("^.*\\.([0-9]+)$", "\\1", shard_names))
+  read_from <- file.path(log_dir, shard_names)
+
+  for (i in seq_along(shards)) {
+    lines <- readLines(read_from[i], warn = FALSE)
+    if (length(lines)) {
+      con <- file(path, open = "a")
+      tryCatch({
+        writeLines(lines, con = con, useBytes = TRUE)
+      }, finally = {
+        close(con)
+      })
+    }
+    unlink(read_from[i])
+  }
+
+  invisible(shards)
+}
+
 # Internal: replace long inline payloads (base64 file data) so logs stay small.
 .llmr_log_scrub <- function(x) {
   if (is.character(x) && length(x) == 1L && nchar(x) > 4096L &&
@@ -117,6 +189,7 @@ llm_log_status <- function() {
                             error_message = NULL, duration_s = NULL) {
   path <- getOption("llmr.log_file")
   if (is.null(path)) return(invisible(NULL))
+  path <- .llmr_log_path(path)
   ok <- try({
     include_msgs <- isTRUE(getOption("llmr.log_messages", TRUE))
     rec <- list(

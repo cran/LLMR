@@ -187,7 +187,7 @@
 #' @examples
 #' \dontrun{
 #'   # Temperature sweep
-#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano")
+#'   config <- llm_config(provider = "groq", model = "openai/gpt-oss-20b")
 #'
 #'   messages <- "What is 15 * 23?"
 #'   temperatures <- c(0, 0.3, 0.7, 1.0, 1.5)
@@ -220,13 +220,25 @@ call_llm_sweep <- function(base_config,
     ))
   }
 
+  # Top-level config fields must be set on the config itself, not tucked into
+  # model_params (where sweeping e.g. "model" would leave the real model unchanged
+  # and send a duplicate key). Mirrors expand_llm_config()'s routing.
+  top_level <- c("provider", "model", "api_key", "embedding",
+                 "troubleshooting", "no_change")
+
   # Build experiments tibble
   experiments <- tibble::tibble(
     !!param_name := param_values, # Use the actual parameter name directly
     config = lapply(param_values, function(val) {
       modified_config <- base_config
-      if (is.null(modified_config$model_params)) modified_config$model_params <- list()
-      modified_config$model_params[[param_name]] <- val
+      if (param_name %in% top_level) {
+        modified_config[[param_name]] <- val
+        # provider determines S3 dispatch in call_llm(); keep the class in sync
+        class(modified_config) <- c("llm_config", modified_config$provider)
+      } else {
+        if (is.null(modified_config$model_params)) modified_config$model_params <- list()
+        modified_config$model_params[[param_name]] <- val
+      }
       modified_config
     }),
     messages = rep(list(messages), length(param_values))
@@ -269,7 +281,7 @@ call_llm_sweep <- function(base_config,
 #' @examples
 #' \dontrun{
 #'   # Broadcast different questions
-#'   config <- llm_config(provider = "openai", model = "gpt-4.1-nano")
+#'   config <- llm_config(provider = "groq", model = "openai/gpt-oss-20b")
 #'
 #'   messages <- list(
 #'     list(list(role = "user", content = "What is 2+2?")),
@@ -406,6 +418,10 @@ call_llm_compare <- function(configs_list,
 #'   between 0 and \code{start_jitter} seconds. The default is 0 (no delay);
 #'   set a few seconds when launching very large runs against a provider with
 #'   strict burst limits.
+#' @param .request_hash Logical. If \code{TRUE}, append a \code{request_hash}
+#'   column (the same key \code{\link{llm_request_hash}()} produces) so the
+#'   results can be joined to the audit log. Default \code{FALSE}; the column is
+#'   omitted unless requested. See also \code{\link{llm_add_request_hash}()}.
 #'
 #' @return A tibble containing all original columns plus:
 #' \itemize{
@@ -467,7 +483,8 @@ call_llm_par <- function(experiments,
                          max_workers = NULL,
                          progress = FALSE,
                          json_output = NULL,
-                         start_jitter = 0) {
+                         start_jitter = 0,
+                         .request_hash = FALSE) {
 
   if (!is.null(json_output) && verbose) {
     message("Note: The 'json_output' parameter is deprecated. Raw JSON is always included as 'raw_response_json'.")
@@ -528,8 +545,16 @@ call_llm_par <- function(experiments,
     max_workers <- min(future::availableCores(omit = 1L), nrow(experiments))
     max_workers <- max(1, max_workers)
   }
+
+  .llmr_log_file_capture <- getOption("llmr.log_file")
+  .llmr_log_msgs_capture <- isTRUE(getOption("llmr.log_messages", TRUE))
+  .llmr_parent_pid <- Sys.getpid()
+
   current_plan <- future::plan()
   on.exit(future::plan(current_plan), add = TRUE)
+  if (!is.null(.llmr_log_file_capture)) {
+    on.exit(try(.llmr_log_merge(.llmr_log_file_capture), silent = TRUE), add = TRUE)
+  }
   if (!inherits(current_plan, "FutureStrategy") || inherits(current_plan, "sequential")) {
     future::plan(future::multisession, workers = max_workers)
   }
@@ -541,6 +566,23 @@ call_llm_par <- function(experiments,
   }
 
   par_worker <- function(i_val) {
+    if (Sys.getpid() != .llmr_parent_pid) {
+      on.exit(options(llmr.log_file = NULL,
+                      llmr.log_messages = NULL,
+                      llmr.log_parallel = NULL), add = TRUE)
+      if (is.null(.llmr_log_file_capture)) {
+        options(llmr.log_file = NULL,
+                llmr.log_messages = NULL,
+                llmr.log_parallel = NULL)
+      } else {
+        options(
+          llmr.log_file     = .llmr_log_file_capture,
+          llmr.log_messages = .llmr_log_msgs_capture,
+          llmr.log_parallel = TRUE
+        )
+      }
+    }
+
     # small helpers to guarantee column types
     as_char_or_na <- function(x) {
       if (is.null(x) || length(x) == 0 || all(is.na(x))) return(NA_character_)
@@ -661,6 +703,10 @@ call_llm_par <- function(experiments,
     )
   }
 
+  if (!is.null(.llmr_log_file_capture)) {
+    try(.llmr_log_merge(.llmr_log_file_capture), silent = TRUE)
+  }
+
   api_results_df <- dplyr::bind_rows(api_call_results_list)
 
   output_df <- experiments
@@ -714,12 +760,50 @@ call_llm_par <- function(experiments,
                     successful_calls, nrow(output_df)))
   }
 
+  # Opt-in: append the audit-log join key, computed from the retained config and
+  # messages columns (off by default; the column is added only when requested).
+  if (isTRUE(.request_hash)) {
+    output_df <- .llmr_add_request_hash(output_df)
+  }
+
   if (simplify) {
     output_df <- .unnest_config_to_cols(output_df, config_col = "config")
   }
   res <- if (requireNamespace("tibble", quietly = TRUE)) tibble::as_tibble(output_df) else output_df
   class(res) <- unique(c("llmr_experiment", class(res)))
   res
+}
+
+# Append a `request_hash` column from a frame's retained `config`/`messages`
+# columns. Internal worker for both `call_llm_par(.request_hash=TRUE)` and the
+# exported `llm_add_request_hash()`.
+.llmr_add_request_hash <- function(df) {
+  if (!all(c("config", "messages") %in% names(df))) {
+    stop("`config` and `messages` columns are required to add `request_hash`.")
+  }
+  df$request_hash <- vapply(seq_len(nrow(df)), function(i) {
+    tryCatch(
+      llm_request_hash(config = df$config[[i]], messages = df$messages[[i]]),
+      error = function(e) NA_character_)
+  }, character(1))
+  df
+}
+
+#' Append the audit-log request hash to a parallel-results frame
+#'
+#' Adds a `request_hash` column to a data frame that still carries the `config`
+#' and `messages` list-columns (such as the result of [call_llm_par()]). The
+#' hash is the same key [llm_request_hash()] produces, so the parallel path can
+#' be joined to the audit log written by [llm_log_enable()]. Equivalent to
+#' calling `call_llm_par(..., .request_hash = TRUE)` after the fact.
+#'
+#' @param df A data frame with `config` and `messages` columns.
+#' @return `df` with an added `request_hash` character column.
+#' @seealso [call_llm_par()], [llm_request_hash()].
+#' @export
+llm_add_request_hash <- function(df) {
+  stopifnot(is.data.frame(df))
+  .llmr_add_request_hash(df)
 }
 
 #' Build Factorial Experiment Design
@@ -979,13 +1063,11 @@ reset_llm_parallel <- function(verbose = FALSE) {
 #' @return A list of [llm_config] objects.
 #'
 #' @examples
-#' \dontrun{
 #' base <- llm_config("openai", "gpt-4.1-nano")
 #' cfgs <- expand_llm_config(base,
 #'                           temperature = c(0, 0.5, 1),
 #'                           model = c("gpt-4.1-nano", "gpt-4.1-mini"))
 #' length(cfgs)
-#' }
 #'
 #' @seealso [llm_config()], [llm_cross_design()], [call_llm_par()]
 #' @export
@@ -1033,7 +1115,7 @@ expand_llm_config <- function(base_config, ...) {
 #' @examples
 #' \dontrun{
 #' cities <- data.frame(city = c("Cairo", "Lima"))
-#' cfgs <- list(llm_config("openai", "gpt-4.1-nano"), llm_config("openai", "gpt-4.1-mini"))
+#' cfgs <- list(llm_config("groq", "openai/gpt-oss-20b"), llm_config("deepseek", "deepseek-chat"))
 #' design <- llm_cross_design(cities, cfgs, prompt = "What country is {city} in?")
 #' results <- call_llm_par(design)
 #' }
@@ -1108,13 +1190,26 @@ llm_cross_design <- function(.data, configs, prompt = NULL, .messages = NULL, .s
 #' @seealso [call_llm_par()]
 #' @export
 llm_par_resume <- function(results, tries = 3, ...) {
-  if (is.data.frame(results) &&
-      any(grepl("^success\\.[0-9]+$", names(results)))) {
-    stop("This result has a collision-renamed 'success' column (e.g. ",
-         "'success.1'), which happens when the input frame already had a column ",
-         "named 'success'. Rename that input column before calling ",
-         "call_llm_par() so the diagnostic columns keep their canonical names.",
-         call. = FALSE)
+  # If the input frame had a column named like ANY diagnostic, call_llm_par()
+  # collision-renamed its own output (e.g. duration -> duration.1). The patch
+  # loop below matches columns by name, so it would overwrite the user's column
+  # with re-run diagnostics. Refuse up front (as the original guard did for
+  # 'success' only) rather than silently corrupt the frame.
+  diag_cols <- c("response_text", "raw_response_json", "success", "error_message",
+                 "finish_reason", "sent_tokens", "rec_tokens", "total_tokens",
+                 "reasoning_tokens", "cached_tokens", "response_id", "duration",
+                 "status_code", "error_code", "bad_param", "response")
+  if (is.data.frame(results)) {
+    renamed <- diag_cols[vapply(diag_cols, function(d)
+      any(grepl(paste0("^", d, "\\.[0-9]+$"), names(results))), logical(1))]
+    if (length(renamed)) {
+      stop("This result has collision-renamed diagnostic column(s) (e.g. '",
+           renamed[[1]], ".1'), which happens when the input frame already had ",
+           "column(s) named like a diagnostic (",
+           paste(renamed, collapse = ", "), "). Rename those input column(s) ",
+           "before calling call_llm_par() so llm_par_resume() patches the right ",
+           "columns.", call. = FALSE)
+    }
   }
   if (!is.data.frame(results) ||
       !all(c("config", "messages", "success") %in% names(results))) {
@@ -1285,4 +1380,3 @@ summary.llmr_experiment <- function(object, ...) {
   }
   invisible(object)
 }
-

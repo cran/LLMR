@@ -60,7 +60,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -422,8 +422,8 @@ doubles</strong> vary by provider/sample.<br />
 <li><strong>Safety/length caps</strong> can truncate output; detect and
 handle “finish_reason = length/filter.”</li>
 </ul>
-<div id="llmr-helpers-to-blunt-those-edges" class="section level3">
-<h3>LLMR helpers to blunt those edges</h3>
+<div id="llmr-helpers-for-common-parsing-failures" class="section level3">
+<h3>LLMR helpers for common parsing failures</h3>
 <ul>
 <li><code>llm_parse_structured()</code> strips fences and extracts the
 <strong>largest balanced</strong> <code>{...}</code> or

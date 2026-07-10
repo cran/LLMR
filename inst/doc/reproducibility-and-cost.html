@@ -60,7 +60,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -401,6 +401,13 @@ the statistic reviewers ask for, Krippendorff’s alpha.</p>
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>ag <span class="ot">&lt;-</span> <span class="fu">llm_agreement</span>(reps, <span class="at">prefix =</span> <span class="st">&quot;sentiment&quot;</span>)</span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>ag</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a>ag<span class="sc">$</span>by_row</span></code></pre></div>
+<p>A note on reasoning models such as <code>gpt-oss-20b</code>: they
+spend tokens on hidden reasoning before the visible answer, so a small
+<code>max_tokens</code> paired with a non-zero temperature can return an
+empty reply (the budget is exhausted before the answer emerges). Give
+such models a generous <code>max_tokens</code>, and prefer leaving the
+temperature unset, since several reasoning models expect their own
+default.</p>
 <p>Low alpha is itself a finding: the instrument disagrees with itself
 on this construct, and downstream estimates should carry that
 uncertainty rather than hide it.</p>

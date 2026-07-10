@@ -197,6 +197,35 @@ test_that("whole-batch transport failure recovers via split", {
   expect_true(all(res$success))
 })
 
+test_that("recovered tags singleton carries the field instruction, unwrapped (B4)", {
+  # Force a cascade to singletons (multi-row call fails), capture every call's
+  # messages, and assert the singleton ASKS for field tags (system-side) while
+  # its USER payload stays unwrapped (no <row_>). Pre-fix the singleton carried
+  # no field instruction at all.
+  seen <- new.env(); seen$msgs <- list()
+  spy <- function(config, messages, ...) {
+    seen$msgs[[length(seen$msgs) + 1L]] <- messages[[1]]
+    usr <- .get_user(messages[[1]])
+    if (grepl("<row_", usr))
+      return(mk_res(NA_character_, success = FALSE, finish = "error:server",
+                    error_message = "boom"))
+    g <- .global_ids(usr)[1]
+    mk_res(paste0("<age>", 20 + g, "</age>"))   # bare field content, no <row_1>
+  }
+  res <- LLMR:::.run_batched(CFG, TXT, NULL, mode = "tags", tags = c("age"),
+    rows_per_prompt = 5, rowpack_payload = "user",
+    rowpack_recovery = "halve_recursive", .broadcast = spy)
+  expect_true(all(res$success))
+  # the singleton calls are those whose user payload has no <row_> wrapper
+  singletons <- Filter(function(m) !grepl("<row_", .get_user(m)), seen$msgs)
+  expect_gt(length(singletons), 0L)
+  sys_of <- function(m) if (!is.null(names(m)) && "system" %in% names(m)) m[["system"]] else ""
+  # every singleton's SYSTEM side asks for XML-like field tags...
+  expect_true(all(vapply(singletons, function(m) grepl("tag", sys_of(m), ignore.case = TRUE), logical(1))))
+  # ...and no singleton USER payload was wrapped in <row_i>
+  expect_false(any(vapply(singletons, function(m) grepl("<row_", .get_user(m)), logical(1))))
+})
+
 test_that("call budget bounds pathological recursion", {
   spy <- new.env(); spy$calls <- 0L
   always_drop <- function(config, messages, ...) {
@@ -355,4 +384,33 @@ test_that("batched llm_mutate adds batch columns and resolves rows", {
   # token totals attributed once per batch
   per_batch <- tapply(out$ans_tot, out$ans_rowpack, function(x) sum(!is.na(x)))
   expect_true(all(per_batch == 1L))
+})
+
+test_that("retry_same retries once and halve_once does not recurse to singletons", {
+  # retry_same: exactly one retry, then give up (was ~log2(rows_per_prompt)+1).
+  nc <- 0L
+  never <- function(config, messages, ...) { nc <<- nc + 1L; mk_res("no rows here") }
+  LLMR:::.run_batched(CFG, paste0("t", 1:4), NULL, mode = "plain", rows_per_prompt = 4,
+                      rowpack_recovery = "retry_same", .broadcast = never)
+  expect_equal(nc, 2L)
+
+  # A stub that resolves the first two rows of any batch (so head_only is FALSE
+  # and the halve_once / halve_recursive branch actually runs) and leaves the
+  # rest unresolved.
+  partial <- function(config, messages, ...) {
+    ids <- .local_ids(.get_user(messages[[1]]))
+    if (!length(ids)) return(mk_res("ok"))                 # unwrapped singleton
+    keep <- utils::head(ids, 2L)
+    mk_res(paste0("<row_", keep, ">ok</row_", keep, ">", collapse = "\n"))
+  }
+  n_once <- 0L
+  LLMR:::.run_batched(CFG, paste0("t", 1:6), NULL, mode = "plain", rows_per_prompt = 6,
+    rowpack_recovery = "halve_once",
+    .broadcast = function(config, messages, ...) { n_once <<- n_once + 1L; partial(config, messages, ...) })
+  n_rec <- 0L
+  LLMR:::.run_batched(CFG, paste0("t", 1:6), NULL, mode = "plain", rows_per_prompt = 6,
+    rowpack_recovery = "halve_recursive",
+    .broadcast = function(config, messages, ...) { n_rec <<- n_rec + 1L; partial(config, messages, ...) })
+  # halve_once stops after the single halving; halve_recursive keeps splitting
+  expect_lt(n_once, n_rec)
 })

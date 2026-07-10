@@ -76,6 +76,12 @@
 
     ### 2b - *named* but no "file" -> legacy path
     if (!"file" %in% msg_names) {
+      # Empty/NA names (e.g. c(system = "x", "y"), where the second element is
+      # unnamed) default to the user role, mirroring the multimodal path below.
+      # Without this the turn carries role "" and providers reject it (HTTP 400,
+      # "invalid role").
+      msg_names[is.na(msg_names) | msg_names == ""] <- "user"
+      names(messages) <- msg_names
       return(unname(purrr::imap(messages,
                                 \(txt, role) list(role = role, content = txt))))
     }
@@ -196,14 +202,26 @@ perform_request <- function(req, verbose, provider = NULL, model = NULL, config 
   code <- httr2::resp_status(resp)
 
   if (code >= 400) {
-    err <- try(httr2::resp_body_json(resp), silent = TRUE)
+    # Parse the error body tolerantly. Some providers (e.g. DeepSeek) return a
+    # JSON error body under Content-Type: application/octet-stream, which
+    # resp_body_json() rejects by default; check_type = FALSE lets us read the
+    # real message instead of masking it. The happy-path 200 parse below stays
+    # strict. raw_err is the final fallback when the body has no error$message.
+    err <- try(httr2::resp_body_json(resp, check_type = FALSE), silent = TRUE)
+    raw_err <- try(httr2::resp_body_string(resp), silent = TRUE)
+    raw_err <- if (inherits(raw_err, "try-error")) NA_character_ else trimws(raw_err)
     category <- if (code >= 500) "server" else if (code == 429) "rate_limit"
     else if (code %in% c(401L, 403L)) "auth"
     else if (code == 408) "server"            # request timeout: transient, retried like a 5xx
     else if (code == 400) "param" else "unknown"
-    bad_param <- if (!inherits(err, "try-error")) err$error$param %||% NA_character_ else NA_character_
-    err_reason <- if (inherits(err, "try-error")) "No message supplied"
-                  else err$error$message %||% "No message supplied"
+    bad_param <- if (!inherits(err, "try-error")) err$error$param %||% err$param %||% NA_character_ else NA_character_
+    raw_tail <- if (!is.na(raw_err) && nzchar(raw_err)) substr(raw_err, 1L, 2000L) else NULL
+    err_reason <- if (!inherits(err, "try-error")) {
+      err$error$message %||% err$message %||% err$error$type %||% err$error$code %||%
+        raw_tail %||% "No message supplied"
+    } else {
+      raw_tail %||% "No message supplied"
+    }
     msg_lines <- c(
       "LLM API request failed.",
       paste0("HTTP status: ", code),
@@ -222,11 +240,12 @@ perform_request <- function(req, verbose, provider = NULL, model = NULL, config 
       provider    = provider %||% NA_character_,
       model       = model %||% NA_character_,
       param       = bad_param,
-      code        = if (!inherits(err, "try-error")) err$error$code %||% NA_character_ else NA_character_,
+      code        = if (!inherits(err, "try-error")) err$error$code %||% err$code %||% NA_character_ else NA_character_,
       request_id  = httr2::resp_header(resp, "x-request-id") %||%
         httr2::resp_header(resp, "request-id"),
       retry_after = suppressWarnings(as.numeric(httr2::resp_header(resp, "retry-after") %||% NA_real_)),
-      body        = if (!inherits(err, "try-error")) err else NULL
+      body        = if (!inherits(err, "try-error")) err
+                    else if (!is.null(raw_tail)) list(raw = raw_tail) else NULL
     )
   }
 
@@ -962,6 +981,9 @@ call_llm.openai <- function(config, messages, verbose = FALSE) {
       if (!is.null(mp$reasoning_effort)) body0$reasoning <- list(effort = mp$reasoning_effort)
 
   } else {
+      # json_object mode (OpenAI sets this when a schema is absent) needs "json"
+      # in the prompt; inject when absent (no-op for json_schema mode).
+      formatted_messages      <- .ensure_json_object_instruction(formatted_messages, mp$response_format)
       body0$messages          <- formatted_messages
       body0$temperature       <- mp$temperature
       body0$top_p             <- mp$top_p
@@ -975,12 +997,28 @@ call_llm.openai <- function(config, messages, verbose = FALSE) {
 
   body0 <- .drop_null(body0)
 
-  if (!is.null(mp$response_format)) body0$response_format <- mp$response_format
-  if (is.null(body0$response_format) && !is.null(mp$json_schema)) {
-    body0$response_format <- list(type = "json_schema", json_schema = list(name = "llmr_schema", schema = mp$json_schema, strict = TRUE))
+  # The Responses API uses a different shape (text.format, flat tools) and
+  # rejects the chat-completions response_format/tools/tool_choice outright, so
+  # sending them there is a guaranteed HTTP 400. LLMR does not translate them for
+  # that path yet; fail fast with a clear message instead of shaping a doomed
+  # request. The chat path attaches them as before.
+  if (is_responses_api) {
+    if (!is.null(mp$response_format) || !is.null(mp$json_schema) ||
+        !is.null(mp$tools) || !is.null(mp$tool_choice)) {
+      stop("Structured output (response_format / json_schema) and tools are not ",
+           "supported on the OpenAI Responses API path in LLMR yet (this covers ",
+           "models such as o1-pro, o3-pro, gpt-5-pro, and the deep-research ",
+           "models). Use a chat-completions model, or point api_url at a ",
+           "/v1/chat/completions endpoint.", call. = FALSE)
+    }
+  } else {
+    if (!is.null(mp$response_format)) body0$response_format <- mp$response_format
+    if (is.null(body0$response_format) && !is.null(mp$json_schema)) {
+      body0$response_format <- list(type = "json_schema", json_schema = list(name = "llmr_schema", schema = mp$json_schema, strict = TRUE))
+    }
+    if (!is.null(mp$tools))       body0$tools       <- mp$tools
+    if (!is.null(mp$tool_choice)) body0$tool_choice <- mp$tool_choice
   }
-  if (!is.null(mp$tools))       body0$tools       <- mp$tools
-  if (!is.null(mp$tool_choice)) body0$tool_choice <- mp$tool_choice
 
   # MODIFIABILITY HOOK 3: Pass-through any extra configuration params verbatim
   skip_keys <- c("temperature", "top_p", "frequency_penalty", "presence_penalty",
@@ -1047,6 +1085,31 @@ call_llm.anthropic <- function(config, messages, verbose = FALSE) {
   }
   req <- .anthropic_chat_request(config, messages)
   perform_request(req, verbose, provider = config$provider, model = config$model, config = config)
+}
+
+# Parameters the Anthropic builder either sends or intentionally drops (drops
+# already noted by .translate_params), plus LLMR-internal/transport keys. Anything
+# in config$model_params outside this set is silently ignored by the request
+# shape, so note it once (the llm_config() docs promise this).
+.anthropic_note_dropped <- function(mp, no_change) {
+  if (isTRUE(no_change) || !length(mp)) return(invisible())
+  known <- c("temperature", "top_p", "top_k", "max_tokens", "max_completion_tokens",
+             "budget_tokens", "thinking_budget", "include_thoughts", "thinking",
+             "tools", "tool_choice", "stop_sequences", "metadata",
+             "frequency_penalty", "presence_penalty", "repetition_penalty", "seed",
+             "logprobs", "top_logprobs",
+             # set by enable_structured_output(); consumed or LLMR-internal
+             "json_schema", "llmr_schema_tool", "response_format",
+             "cache", "anthropic_beta", "api_url", "base_url", "use_responses_api",
+             "request_modifier", "req_builder", "response_modifier", "timeout",
+             "vertex", "project", "location", "region")
+  dropped <- setdiff(names(mp), known)
+  if (length(dropped)) {
+    .llmr_param_note(sprintf(
+      "Ignoring parameter(s) not supported by the Anthropic API: %s",
+      paste(dropped, collapse = ", ")))
+  }
+  invisible()
 }
 
 # Build (without performing) the Anthropic messages request. Used by
@@ -1117,12 +1180,15 @@ call_llm.anthropic <- function(config, messages, verbose = FALSE) {
       max_tok, budget_tokens))
   }
 
+  mp0 <- config$model_params %||% list()
   body <- .drop_null(list(
-    model       = config$model,
-    max_tokens  = max_tok,
-    temperature = params$temperature,
-    top_p       = params$top_p,
-    top_k       = params$top_k,
+    model         = config$model,
+    max_tokens    = max_tok,
+    temperature   = params$temperature,
+    top_p         = params$top_p,
+    top_k         = params$top_k,
+    stop_sequences = mp0$stop_sequences,   # documented Anthropic param; do not drop
+    metadata       = mp0$metadata,
     system      = formatted$system_text,                    # top-level system
     messages    = processed_user_messages,
     thinking    = if (thinking_enabled) .drop_null(list(
@@ -1130,6 +1196,11 @@ call_llm.anthropic <- function(config, messages, verbose = FALSE) {
       budget_tokens = budget_tokens
     )) else NULL
   ))
+
+  # Honor the documented "quietly note anything they drop" contract: any config
+  # parameter the Anthropic builder neither sends nor deliberately drops (the
+  # latter already noted by .translate_params) is reported once.
+  .anthropic_note_dropped(mp0, config$no_change)
 
   # Respect tools/tool_choice if already present (e.g., from enable_structured_output)
   mp <- config$model_params %||% list()
@@ -1327,6 +1398,8 @@ call_llm.gemini <- function(config, messages, verbose = FALSE) {
     seed             = params$seed,
     presencePenalty  = params$presencePenalty  %||% params$presence_penalty,
     frequencyPenalty = params$frequencyPenalty %||% params$frequency_penalty,
+    # documented Gemini param; accept either the canonical or camelCase spelling
+    stopSequences    = params$stopSequences %||% params$stop_sequences,
     responseLogprobs = resp_logprobs,
     logprobs         = n_logprobs,
     thinkingConfig   = if (length(thinking_cfg)) thinking_cfg else NULL,
@@ -1412,6 +1485,10 @@ call_llm.gemini <- function(config, messages, verbose = FALSE) {
       mp <- mp[setdiff(names(mp), bad)]
     }
   }
+
+  # json_object mode on DeepSeek/Alibaba/Zhipu/Moonshot/Xiaomi needs "json" in
+  # the prompt; inject a minimal instruction when absent (no-op otherwise).
+  formatted_messages <- .ensure_json_object_instruction(formatted_messages, mp$response_format)
 
   body0 <- list(model = config$model, messages = formatted_messages)
   body0$temperature        <- mp$temperature

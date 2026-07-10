@@ -146,11 +146,48 @@ enable_structured_output <- function(config,
   config
 }
 
+# The canonical JSON-object instruction. Several OpenAI-compatible providers
+# (DeepSeek, Alibaba, Zhipu, Moonshot, Xiaomi) reject `response_format =
+# {type:"json_object"}` with HTTP 400 unless the word "json" appears somewhere in
+# the messages. Reused by the request builders and by batched singleton recovery.
+.llmr_json_object_instruction <- "Return only a valid JSON object. Do not include prose, Markdown, or code fences."
+
+#' Ensure a json_object request mentions JSON
+#'
+#' When `response_format` requests bare JSON-object mode, prepend a minimal system
+#' instruction so providers that require the word "json" in the prompt accept the
+#' request. No-op for json_schema mode, for any other response_format, and when
+#' the messages already mention json (so existing prompts and the batched path,
+#' which already says "JSON object", are untouched). `messages` is the list of
+#' `list(role=, content=)` objects the builder is about to send.
+#' @keywords internal
+#' @noRd
+.ensure_json_object_instruction <- function(messages, response_format) {
+  if (is.null(response_format) ||
+      !identical(response_format$type %||% "", "json_object")) {
+    return(messages)
+  }
+  text_of <- function(m) {
+    ct <- m$content
+    if (is.character(ct)) return(paste(ct, collapse = " "))
+    if (is.list(ct)) return(paste(vapply(ct, function(p)
+      if (!is.null(p$text)) as.character(p$text) else "", character(1)),
+      collapse = " "))
+    ""
+  }
+  if (any(vapply(messages, function(m) grepl("\\bjson\\b", text_of(m), ignore.case = TRUE),
+                 logical(1)))) {
+    return(messages)
+  }
+  c(list(list(role = "system", content = .llmr_json_object_instruction)), messages)
+}
+
 #' Disable Structured Output (clean provider toggles)
 #'
 #' Removes response_format/response_schema/response_mime_type and schema tool if present.
 #' Keeps user tools intact.
 #' @param config llm_config
+#' @return The `llm_config` with the structured-output request fields removed.
 #' @seealso [enable_structured_output()]
 #' @export
 disable_structured_output <- function(config) {
@@ -521,11 +558,15 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
           }
           v
         }
-        vals    <- lapply(vals, coerce_scalar_like)
-        nonnull <- vals[!vapply(vals, is.null, logical(1))]
+        # Coerce into a NEW variable so the error handler below still sees the
+        # ORIGINAL strings: if vec_ptype_common() fails on a mixed column, the
+        # fallback must stringify the originals ("5.10"), not the coerced values
+        # ("5.10" -> 5.1 -> "5.1"), which would silently corrupt the data.
+        vals_c  <- lapply(vals, coerce_scalar_like)
+        nonnull <- vals_c[!vapply(vals_c, is.null, logical(1))]
           ptype <- vctrs::vec_ptype_common(!!!nonnull)
         na_val <- vctrs::vec_cast(NA, ptype)
-        casted <- lapply(vals, function(v) if (is.null(v)) na_val else vctrs::vec_cast(v, ptype))
+        casted <- lapply(vals_c, function(v) if (is.null(v)) na_val else vctrs::vec_cast(v, ptype))
         vctrs::vec_c(!!!casted)
       } else {
           if (length(nonnull) == 0L) {
@@ -565,6 +606,8 @@ llm_parse_structured_col <- function(.data, fields, structured_col = "response_t
 #' @param .data A data.frame with a `structured_data` list-column.
 #' @param schema JSON Schema (R list)
 #' @param structured_list_col Column name with parsed JSON. Default "structured_data".
+#' @return `.data` with two added columns: `structured_valid` (logical) and
+#'   `structured_error` (character; `NA` when valid).
 #' @seealso [llm_parse_structured_col()], [llm_fn_structured()]
 #' @export
 llm_validate_structured_col <- function(.data, schema, structured_list_col = "structured_data") {
@@ -611,6 +654,10 @@ llm_validate_structured_col <- function(.data, schema, structured_list_col = "st
 #' @param .fields Optional fields to hoist from parsed JSON (supports nested paths).
 #' @param .local_only If TRUE, do not send schema to the provider (parse/validate locally).
 #' @param .validate_local If TRUE and `.schema` provided, validate locally.
+#' @return A tibble: the [call_llm_broadcast()] diagnostics plus the parsed
+#'   structured columns (`structured_ok`, `structured_data`, one column per
+#'   hoisted field, and `structured_valid`/`structured_error` when `.schema` is
+#'   validated locally).
 #' @seealso [llm_fn()], [llm_mutate_structured()], [enable_structured_output()],
 #'   [llm_parse_structured_col()]
 #' @export
@@ -686,6 +733,10 @@ llm_fn_structured <- function(x,
 #' df |> llm_mutate_structured(result = c(system = "Be brief.", user = "{text}"), .config = cfg, .schema = schema)
 #' }
 #'
+#' @return `.data` with the output column, the diagnostic columns, and the parsed
+#'   structured columns (`structured_ok`, `structured_data`, one column per
+#'   hoisted field, and `structured_valid`/`structured_error` when `.schema` is
+#'   validated locally).
 #' @seealso [llm_mutate()], [llm_fn_structured()], [enable_structured_output()],
 #'   [llm_parse_structured_col()], [llm_mutate_tags()]
 #' @export
@@ -707,9 +758,10 @@ llm_mutate_structured <- function(.data,
                             ...) {
   # Capture whether output was actually provided
   output_missing <- missing(output)
-  # Track whether .before / .after were supplied (vs defaulted)
-  before_missing <- missing(.before)
-  after_missing  <- missing(.after)
+  # Resolve .before/.after to column name(s) once (see .llm_reloc_name); the
+  # resolved name forwards cleanly to the batched engine and to llm_mutate.
+  before_name <- .llm_reloc_name(rlang::enquo(.before), .data)
+  after_name  <- .llm_reloc_name(rlang::enquo(.after), .data)
   # Capture dots for safe forwarding
   dots <- rlang::dots_list(...)
   .batched <- .validate_rows_per_prompt(.rows_per_prompt)
@@ -727,8 +779,7 @@ llm_mutate_structured <- function(.data,
       .rowpack_recovery = .rowpack_recovery, dots = dots,
       data_df = .data,
       output = if (output_missing) NULL else rlang::ensym(output),
-      .before = if (before_missing) NULL else .before,
-      .after  = if (after_missing) NULL else .after)
+      .before = before_name, .after = after_name)
     return(out2)
   }
 
@@ -747,16 +798,15 @@ llm_mutate_structured <- function(.data,
       .system_prompt = .system_prompt,
       .return = "columns"
     )
-    if (!before_missing) args$.before <- .before
-    if (!after_missing)  args$.after  <- .after
-    out <- do.call(llm_mutate, c(args, dots))
-    # Extract the output column name from the result
-    # It should be the first new column added
-    new_cols <- setdiff(names(out), names(.data))
-    if (length(new_cols) == 0) {
+    args$.before <- before_name   # resolved name; NULL removes the entry
+    args$.after  <- after_name
+    # Identify the output column by the shorthand mapping name (robust when that
+    # name already exists in .data), not by set-differencing the result columns.
+    output_name <- .llm_shorthand_name(dots)
+    if (is.null(output_name)) {
       stop("Could not determine output column name from shorthand syntax")
     }
-    output_name <- new_cols[1]
+    out <- do.call(llm_mutate, c(args, dots))
   } else {
     # Explicit output: use it directly
     output_sym <- rlang::ensym(output)
@@ -769,8 +819,8 @@ llm_mutate_structured <- function(.data,
       .system_prompt = .system_prompt,
       .return = "columns"
     )
-    if (!before_missing) args$.before <- .before
-    if (!after_missing)  args$.after  <- .after
+    args$.before <- before_name   # resolved name; NULL removes the entry
+    args$.after  <- after_name
     out <- do.call(llm_mutate, c(args, dots))
     output_name <- rlang::as_name(output_sym)
   }
@@ -798,6 +848,9 @@ llm_mutate_structured <- function(.data,
 #' @param schema Optional JSON Schema list.
 #' @param .fields Optional fields to hoist from parsed JSON (supports nested paths).
 #' @param ... Passed to [call_llm_par()].
+#' @return A tibble of class `llmr_experiment`: the [call_llm_par()] result with
+#'   structured output parsed by [llm_parse_structured_col()] (adds
+#'   `structured_ok`, `structured_data`, and one column per hoisted field).
 #' @seealso [call_llm_par()], [llm_parse_structured_col()],
 #'   [enable_structured_output()]
 #' @export

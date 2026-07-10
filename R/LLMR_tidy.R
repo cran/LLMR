@@ -62,6 +62,50 @@
   invisible(NULL)
 }
 
+# Resolve a defused .before/.after argument (a tidyselect quosure) to the
+# column name(s) it selects, or NULL when the argument was not supplied. Doing
+# this once, at each verb's boundary, is what makes .before/.after robust:
+# is.null(.before) would force-evaluate a bare-symbol column reference and error
+# ("object 'id' not found"), and forwarding a quosure through delegating verbs
+# (llm_mutate -> llm_mutate_structured/tags -> the batched engines) is fragile
+# across the mixed call styles. A resolved character name has neither problem --
+# it forwards cleanly and re-resolves to itself. quo_is_null() detects "not
+# supplied" without evaluating; tidyselect handles a bare symbol, a string, or
+# any tidyselect helper (last_col(), starts_with(), ...) uniformly.
+.llm_reloc_name <- function(quo, data) {
+  if (rlang::quo_is_null(quo)) return(NULL)
+  nm <- names(tidyselect::eval_select(quo, data))
+  if (!length(nm)) NULL else nm
+}
+
+# Append the generated columns, or relocate them to the resolved .before/.after
+# column name(s). Neither supplied -> append (dplyr::mutate semantics); with both
+# NULL, dplyr::relocate() would instead move them to the FRONT, which is the bug
+# this guard prevents.
+.llm_relocate_added <- function(df, added_names, before_name, after_name) {
+  if (is.null(before_name) && is.null(after_name)) return(df)
+  if (!is.null(before_name)) {
+    dplyr::relocate(df, tidyselect::all_of(added_names),
+                    .before = tidyselect::all_of(before_name))
+  } else {
+    dplyr::relocate(df, tidyselect::all_of(added_names),
+                    .after = tidyselect::all_of(after_name))
+  }
+}
+
+# The output column name for the shorthand form `newcol = "<prompt>"`: the name
+# of the first character-valued entry in `dots`. The structured/tags variants use
+# this to identify the output column BY NAME, which is robust when that name
+# already exists in the data; set-differencing the result columns is not (the
+# clobbered original is excluded, so the first "new" column is <out>_finish).
+.llm_shorthand_name <- function(dots) {
+  nm <- names(dots)
+  if (is.null(nm)) return(NULL)
+  cand <- which(nzchar(nm) &
+                  vapply(dots, function(v) is.character(v) && length(v) >= 1L, logical(1)))
+  if (!length(cand)) NULL else nm[[cand[[1]]]]
+}
+
 # Overwrite-with-notice semantics for generated columns, mirroring
 # dplyr::mutate(): an existing column of the same name is replaced (and a note
 # is emitted) instead of letting bind_cols() mangle both names.
@@ -138,13 +182,20 @@
 #' "Batch" appears in three distinct senses in LLMR, and they are easy to keep
 #' apart once you note which path each belongs to. (1) The asynchronous provider
 #' Batch API ([llm_batch_submit()] and friends) defers a whole job for later
-#' delivery at a reduced price; it is the only deferred path. (2) In the
+#' delivery at a reduced price; it is the only deferred path here. (2) In the
 #' embedding path, [get_batched_embeddings()]'s `batch_size` sets how many texts
 #' go in one synchronous embedding request, bounded by the provider's per-call
 #' limit. (3) In the generative path, the `.rows_per_prompt` argument here packs
 #' several data rows into one generative prompt and parses them back into rows.
-#' Senses (2) and (3) are synchronous and carry no discount; only (1) defers and
-#' costs less.
+#' Senses (2) and (3) are synchronous: `batch_size` and `.rows_per_prompt`
+#' control how work is grouped into requests, not the per-token rate, so the
+#' synchronous helpers do not themselves apply a provider discount. Pricing is a
+#' separate axis: several providers bill batched *embeddings* at a reduced rate
+#' through a dedicated async/batch tier (the embedding analogue of (1)), so
+#' embeddings are not categorically full-price; that discount is a property of
+#' the endpoint, not of `batch_size`. Row packing (3) can still lower total
+#' tokens by amortizing shared prompt overhead across rows, again without
+#' changing the rate.
 #'
 #' @section Row packing:
 #' With `.rows_per_prompt > 1`, several input elements travel in one generative
@@ -172,7 +223,7 @@
 #' @examples
 #' \dontrun{
 #' words <- c("excellent", "awful")
-#' cfg <- llm_config("openai", "gpt-4.1-nano", temperature = 0)
+#' cfg <- llm_config("groq", "openai/gpt-oss-20b", temperature = 0)
 #' llm_fn(words, "Classify '{x}' as Positive/Negative.", cfg, .return = "text")
 #'
 #' df <- tibble::tibble(text = words, source = c("review", "review"))
@@ -228,7 +279,7 @@ llm_fn <- function(x,
                        .rowpack_recovery = .rowpack_recovery))
   }
 
-  user_txt <- as.character(glue::glue_data(row_df0, prompt, .na = ""))
+  user_txt <- .llm_glue_rows(row_df0, prompt, n_rows)
 
   # Embeddings branch
   if (.is_embedding_config(.config)) {
@@ -385,9 +436,9 @@ llm_fn <- function(x,
 #'   Result expands to numeric columns named `paste0(<output>, 1:N)`. If all rows
 #'   fail to embed, a single `<output>1` column of `NA` is returned.
 #' - Diagnostic columns use suffixes: `_finish`, `_sent`, `_rec`, `_tot`, `_reason`, `_ok`, `_err`, `_id`, `_status`, `_ecode`, `_param`, `_t`.
-#' - **Row batching:** with `.rows_per_prompt > 1`, three further columns are added
-#'   (`_batch`, `_bn`, `_bi`: the batch identifier, the size of the resolving
-#'   call, and the within-call position). They appear only when batching
+#' - **Row packing:** with `.rows_per_prompt > 1`, three further columns are added
+#'   (`_rowpack`, `_rpn`, `_rpi`: the row-pack identifier, the size of the
+#'   resolving call, and the within-call position). They appear only when packing
 #'   actually groups rows, so the default schema is unchanged at `.rows_per_prompt = 1`.
 #'
 #' @return `.data` with the new column(s) appended.
@@ -441,7 +492,7 @@ llm_fn <- function(x,
 #'   hint     = c("European city", "English novelist")
 #' )
 #'
-#' cfg <- llm_config("openai", "gpt-4.1-nano",
+#' cfg <- llm_config("groq", "openai/gpt-oss-20b",
 #'                   temperature = 0)
 #'
 #' # Generative: single-turn with multi-column injection
@@ -567,8 +618,12 @@ llm_mutate <- function(.data,
   if (.batched) .assert_batch_not_embedding(.config)
 
   out_missing <- missing(output)  # shorthand may supply it; final check happens later
-  before_missing <- missing(.before)
-  after_missing  <- missing(.after)
+  # Resolve .before/.after to column name(s) once, here at the boundary, then pass
+  # the resolved names (never the raw tidyselect promise) through every path and
+  # delegation. See .llm_reloc_name(): this avoids both the is.null()-forces-a-
+  # bare-symbol crash and the fragility of forwarding a quosure through verbs.
+  before_name <- .llm_reloc_name(rlang::enquo(.before), .data)
+  after_name  <- .llm_reloc_name(rlang::enquo(.after), .data)
 
   dots <- rlang::dots_list(...)
 
@@ -633,8 +688,10 @@ llm_mutate <- function(.data,
       .rowpack_payload = .rowpack_payload,
       .rowpack_recovery = .rowpack_recovery
     )
-    if (!before_missing) args$.before <- .before
-    if (!after_missing)  args$.after  <- .after
+    # pass resolved names (NULL removes the entry, so the delegate keeps its
+    # default; the delegate re-resolves the name idempotently)
+    args$.before <- before_name
+    args$.after  <- after_name
 
     if (out_missing) {
       # Shorthand set `output` to a symbol earlier
@@ -664,8 +721,10 @@ llm_mutate <- function(.data,
       .rowpack_payload = .rowpack_payload,
       .rowpack_recovery = .rowpack_recovery
     )
-    if (!before_missing) args$.before <- .before
-    if (!after_missing)  args$.after  <- .after
+    # pass resolved names (NULL removes the entry, so the delegate keeps its
+    # default; the delegate re-resolves the name idempotently)
+    args$.before <- before_name
+    args$.after  <- after_name
 
     args$output <- if (out_missing) output else rlang::ensym(output)
     return(do.call(llm_mutate_tags, c(args, dots)))
@@ -710,7 +769,7 @@ llm_mutate <- function(.data,
       }, FUN.VALUE = character(1))
     } else {
       if (is.null(prompt)) stop("For embeddings, provide 'prompt' or '.messages' that yields a user text.")
-      as.character(glue::glue_data(.data, prompt, .na = ""))
+      .llm_glue_rows(.data, prompt, nrow(.data))
     }
 
     emb_mat <- do.call(
@@ -748,14 +807,7 @@ llm_mutate <- function(.data,
       emb_df
     )
 
-    if (!is.null(.before) || !is.null(.after)) {
-      res <- dplyr::relocate(
-        res,
-        dplyr::all_of(names(emb_df)),
-        .before = {{ .before }},
-        .after  = {{ .after }}
-      )
-    }
+    res <- .llm_relocate_added(res, names(emb_df), before_name, after_name)
     return(res)
   }
   # -------------------------------------------------------------------------
@@ -796,12 +848,11 @@ llm_mutate <- function(.data,
 
     base_text <- ifelse(res$success %in% TRUE, res$response_text, NA_character_)
     if (.ret == "text") {
-      return(.data |>
-               dplyr::mutate(!!out_sym := base_text,
-                             .before = {{ .before }}, .after = {{ .after }}))
+      return(.llm_relocate_added(
+        dplyr::mutate(.data, !!out_sym := base_text),
+        rlang::as_name(out_sym), before_name, after_name))
     }
-    return(.assemble_mutate_columns(.data, res, out_sym, .before, .after,
-                                    before_missing, after_missing))
+    return(.assemble_mutate_columns(.data, res, out_sym, before_name, after_name))
   }
 
   res <- do.call(
@@ -814,9 +865,9 @@ llm_mutate <- function(.data,
   base_text <- ifelse(res$success %in% TRUE, res$response_text, NA_character_)
 
   if (.ret == "text") {
-    return(.data |>
-             dplyr::mutate(!!out_sym := base_text,
-                           .before = {{ .before }}, .after = {{ .after }}))
+    return(.llm_relocate_added(
+      dplyr::mutate(.data, !!out_sym := base_text),
+      rlang::as_name(out_sym), before_name, after_name))
   }
 
   if (.ret == "object") {
@@ -825,9 +876,9 @@ llm_mutate <- function(.data,
     for (i in seq_len(nrow(res))) {
       objs[[i]] <- if (isTRUE(res$success[i])) res$response[[i]] else NA
     }
-    return(.data |>
-             dplyr::mutate(!!col_name := objs,
-                           .before = {{ .before }}, .after = {{ .after }}))
+    return(.llm_relocate_added(
+      dplyr::mutate(.data, !!col_name := objs),
+      col_name, before_name, after_name))
   }
 
 
@@ -855,12 +906,9 @@ llm_mutate <- function(.data,
     added
   )
 
-  res_df <- dplyr::relocate(
-    res_df,
-    dplyr::all_of(names(added)),
-    .before = {{ .before }},
-    .after  = {{ .after }}
-  )
-
-  return(res_df)
+  # Append by default (dplyr::mutate semantics), or relocate to the resolved
+  # .before/.after. With both absent, dplyr::relocate() would move the generated
+  # columns to the FRONT, so .llm_relocate_added() returns the appended frame
+  # untouched in that case.
+  return(.llm_relocate_added(res_df, names(added), before_name, after_name))
 }
