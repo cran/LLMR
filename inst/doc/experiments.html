@@ -345,19 +345,18 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) )</span></code></pre></div>
 <div id="overview" class="section level2">
 <h2>Overview</h2>
-<p>This vignette demonstrates:</p>
-<ol style="list-style-type: decimal">
-<li>Building factorial experiment designs with
-<code>build_factorial_experiments()</code></li>
-<li>Running experiments in parallel with
-<code>call_llm_par()</code></li>
-<li>Comparing unstructured vs. structured output across providers</li>
-</ol>
-<p>The workflow builds a factorial design, runs the calls in parallel,
-and then analyzes the returned tibble.</p>
-<p>We will compare three configurations on two prompts, once
-unstructured and once with structured output. We use open models via
-DeepSeek and Groq to ensure fast and low-cost execution.</p>
+<p>Comparative studies ask whether responses change across models,
+conditions, and repeated draws. This example covers three model
+configurations and two task conditions, runs the factorial design in
+parallel, and compares unstructured with schema-structured results.</p>
+<p>For broader designs, <code>repetitions</code>,
+<code>call_llm_compare()</code>, <code>call_llm_sweep()</code>,
+<code>llm_par_resume()</code>, <code>llm_failures()</code>, and
+<code>llm_log_enable()</code> support repeated runs, direct comparisons,
+parameter sweeps, interrupted-run recovery, diagnostics, and call
+logging. Those facilities are outside this example. Live execution
+requires <code>DEEPSEEK_API_KEY</code>, <code>GROQ_API_KEY</code>, and
+<code>LLMR_RUN_VIGNETTES=true</code> in the R environment.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>cfg_ds     <span class="ot">&lt;-</span> <span class="fu">llm_config</span>(<span class="st">&quot;deepseek&quot;</span>, <span class="st">&quot;deepseek-chat&quot;</span>)</span>

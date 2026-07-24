@@ -36,10 +36,10 @@ knitr::opts_chunk$set(
 # r
 
 ## ----tool-history-------------------------------------------------------------
-# attr(r, "tool_history")
+# r$tool_history
 
 ## ----tool-loop-spend----------------------------------------------------------
-# attr(r, "tool_loop")
+# r$tool_loop
 
 ## ----stream-basic-------------------------------------------------------------
 # r <- call_llm_stream(cfg, "In two sentences: why do surveys weight responses?")

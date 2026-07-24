@@ -354,12 +354,11 @@ pipelines see <code>vignette(&quot;tidy-and-structured&quot;)</code>; for enforc
 JSON shapes, <code>vignette(&quot;about-schema&quot;)</code>; for logging,
 replication, caching, and batch jobs,
 <code>vignette(&quot;reproducibility-and-cost&quot;)</code>.)</p>
-<p>One caveat up front: provider support varies. Tool calling works on
-the OpenAI-compatible providers and Anthropic; streaming works across
-the major providers; logprobs are the patchiest – OpenAI and DeepSeek
-expose them, Anthropic does not, and several hosts reject the flag model
-by model. The chunks below use models that were tested when this
-vignette was written.</p>
+<p>Provider support varies. Tool calling works on the OpenAI-compatible
+providers and Anthropic; streaming works across the major providers;
+logprobs are the patchiest – OpenAI and DeepSeek expose them, Anthropic
+does not, and several hosts reject the flag model by model. The chunks
+below use models that were tested when this vignette was written.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span></code></pre></div>
 <div id="tools-the-model-consults-your-r-session" class="section level2">
 <h2>Tools: the model consults your R session</h2>
@@ -401,12 +400,12 @@ the model, and repeats until the model answers in plain text.</p>
 <span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>r</span></code></pre></div>
 <p>The answer quotes numbers the model could only have obtained by
 calling the function. Every execution is on the record:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">attr</span>(r, <span class="st">&quot;tool_history&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>r<span class="sc">$</span>tool_history</span></code></pre></div>
 <p>Two accounting details deserve attention. First, a tool loop is
 <em>several</em> model calls, so <code>tokens(r)</code> – which
 describes the final call only – would undercount it. The aggregate is
 attached to the response:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">attr</span>(r, <span class="st">&quot;tool_loop&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>r<span class="sc">$</span>tool_loop</span></code></pre></div>
 <p>Second, a loop can run away: a confused model may call tools again
 and again. <code>max_tool_calls</code> caps total executions; exceeding
 it raises a typed condition (<code>llmr_tool_limit</code>) instead of
@@ -416,7 +415,7 @@ worst case. Note that <code>finish_reason(x)</code> equal to
 asking for tools, not a final answer; <code>call_llm_tools()</code>
 handles those for you, and you only meet them if you drive the loop
 yourself with <code>tool_calls()</code>.</p>
-<p>A privacy note: <code>tool_history</code> (and the audit log, if
+<p>A privacy note: <code>tool_history</code> (and the call log, if
 enabled) records tool arguments and results verbatim. If tools touch
 sensitive data, treat those records with the same care as the data.</p>
 </div>
@@ -462,22 +461,22 @@ which supports them.</p>
 any, went to the competing label:</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>alts <span class="ot">&lt;-</span> lp<span class="sc">$</span>top_logprobs[[<span class="dv">1</span>]]</span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="fu">transform</span>(alts, <span class="at">p =</span> <span class="fu">exp</span>(logprob))[, <span class="fu">c</span>(<span class="st">&quot;token&quot;</span>, <span class="st">&quot;p&quot;</span>)]</span></code></pre></div>
-<p>Two cautions keep this honest. Logprobs are <em>token-level</em>, not
-semantic: the figure is the probability of that token in that position,
-which tracks “confidence in the label” only when the prompt constrains
-the answer to a single label token – hence the one-word instruction
-above. For multi-token labels, multiply the per-token probabilities (or
-redesign the labels). And a high probability means the model was sure,
-not that it was right; on well-posed items the interesting observations
-are precisely the low-<code>p</code> cases, which are natural candidates
-for human review.</p>
+<p>Two limitations. Logprobs are <em>token-level</em>, not semantic: the
+figure is the probability of that token in that position, which tracks
+“confidence in the label” only when the prompt constrains the answer to
+a single label token – hence the one-word instruction above. For
+multi-token labels, multiply the per-token probabilities (or redesign
+the labels). And a high probability means the model was sure, not that
+it was right; on well-posed items the interesting observations are
+precisely the low-<code>p</code> cases, which are natural candidates for
+human review.</p>
 </div>
-<div id="where-the-other-machinery-lives" class="section level2">
-<h2>Where the other machinery lives</h2>
+<div id="related-features" class="section level2">
+<h2>Related features</h2>
 <p>These three features compose with everything else: a tool loop
 streams its final answer no differently, a logprobs request travels
 through <code>call_llm_par()</code> like any config, and all of it lands
-in the audit log when <code>llm_log_enable()</code> is on. For that log,
+in the call log when <code>llm_log_enable()</code> is on. For that log,
 replication helpers, cost accounting, prompt caching, and the half-price
 batch APIs, continue with
 <code>vignette(&quot;reproducibility-and-cost&quot;)</code>.</p>

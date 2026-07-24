@@ -13,7 +13,7 @@
 #' Stable request hash for an LLM call
 #'
 #' A request hash identifies the question asked. It keys on provider, model, the
-#' canonical role/content turns, and the generation parameters
+#' canonical role/content turns, attachment-content digests, and the generation parameters
 #' (`model_params` minus transport and internal knobs), plus any explicit tool,
 #' response-format, or schema signature. It is the key the archive layer uses for
 #' deduplication and replay, and the value to record when reproducibility of a
@@ -39,6 +39,12 @@
 #' layer's collision detection is the backstop for those cases: it flags when one
 #' replay key gathers records whose stored request hashes disagree.
 #'
+#' The config side hashes the request as declared. A declared parameter that a
+#' provider builder discards as unsupported (with its printed note, e.g.
+#' `top_k` on OpenAI) is still part of the declared identity, so the config-side
+#' hash and the logged transmitted body then differ; set `no_change = TRUE` to
+#' send the parameter as declared, or leave it out of the config.
+#'
 #' @param config An [llm_config()] (its `provider`, `model`, and the
 #'   answer-relevant entries of `model_params` are used), or `NULL` to supply
 #'   `provider`/`model` directly and the generation parameters through
@@ -48,12 +54,13 @@
 #'   whatever was passed to [call_llm()]. Canonicalized to a provider-neutral
 #'   list of role/content turns before hashing, so the message *shape* (a bare
 #'   string vs a named vector vs a turn list) does not change the hash; only the
-#'   roles and text do.
+#'   roles and text do. File and image parts are keyed by a SHA-256 digest of
+#'   their decoded bytes, not by their path or provider-specific wrapper.
 #' @param provider,model Provider and model ids. Taken from `config` when it is
 #'   given; supply them directly (with `extra$params`) when hashing a call read
 #'   from an audit log, where there is no `config`.
-#' @param tools Optional tool definitions (as passed to [call_llm()] /
-#'   [bind_tools()]). Their signature is included when present.
+#' @param tools Optional provider tool definitions. Their signature is included
+#'   when present.
 #' @param response_format Optional response-format directive (e.g. a JSON-mode
 #'   flag or object) that constrains the output.
 #' @param schema Optional JSON Schema used for structured output.

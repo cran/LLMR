@@ -14,7 +14,6 @@ call_llm_par(
   memoize = FALSE,
   max_workers = NULL,
   progress = FALSE,
-  json_output = NULL,
   start_jitter = 0,
   .request_hash = FALSE
 )
@@ -44,9 +43,6 @@ cache, so deduplication is per worker, not global.}
 
 \item{progress}{Logical. If TRUE, shows progress bar.}
 
-\item{json_output}{Deprecated. Raw JSON string is always included as raw_response_json.
-This parameter is kept for backward compatibility but has no effect.}
-
 \item{start_jitter}{Each call starts after a uniformly distributed delay
 between 0 and \code{start_jitter} seconds. The default is 0 (no delay);
 set a few seconds when launching very large runs against a provider with
@@ -55,10 +51,10 @@ strict burst limits.}
 \item{.request_hash}{Logical. If \code{TRUE}, append a \code{request_hash}
 column (the same key \code{\link{llm_request_hash}()} produces) so the
 results can be joined to the audit log. Default \code{FALSE}; the column is
-omitted unless requested. See also \code{\link{llm_add_request_hash}()}.}
+omitted unless requested.}
 }
 \value{
-A tibble containing all original columns plus:
+An \code{llmr_experiment} tibble containing all original columns plus:
 \itemize{
 \item \code{response_text} - assistant text (or \code{NA} on failure)
 \item \code{raw_response_json} - raw JSON string (on failure: the

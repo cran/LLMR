@@ -51,7 +51,7 @@ available together with \code{.tags}.}
 
 \item{.rows_per_prompt}{Integer scalar, or \code{Inf}. Number of input elements packed
 into a single generative request. The default, \code{1}, sends one request per
-element (the historical behaviour). When greater than \code{1}, elements are
+element (the historical behavior). When greater than \code{1}, elements are
 grouped and transmitted in one call wrapped in numbered
 \verb{<row_1>...</row_1>} tags (see \emph{Row batching} below); \code{Inf} sends all
 elements in a single call. Ignored for embedding configurations, which use
@@ -143,6 +143,6 @@ llm_fn(df, "Classify '{text}' from {source}.", cfg, .return = "columns")
 }
 \seealso{
 \code{\link[=llm_mutate]{llm_mutate()}}, \code{\link[=llm_fn_structured]{llm_fn_structured()}}, \code{\link[=llm_fn_tags]{llm_fn_tags()}},
-\code{\link[=llm_parse_rowpack_tags]{llm_parse_rowpack_tags()}}, \code{\link[=setup_llm_parallel]{setup_llm_parallel()}}, \code{\link[=call_llm_broadcast]{call_llm_broadcast()}},
+\code{\link[=setup_llm_parallel]{setup_llm_parallel()}}, \code{\link[=call_llm_broadcast]{call_llm_broadcast()}},
 \code{\link[=get_batched_embeddings]{get_batched_embeddings()}}
 }

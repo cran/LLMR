@@ -470,13 +470,13 @@ providers)</h3>
 <span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>  <span class="fu">str</span>(parsed)</span>
 <span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>})</span></code></pre></div>
 <p><strong>What could still fail?</strong> Proxies labeled
-“OpenAI-compatible” sometimes accept <code>response_format</code> but
-don’t strictly enforce it; LLMR’s parser recovers from fences or
-pre/post text.</p>
+“OpenAI-compatible” sometimes accept <code>response_format</code> but do
+not strictly enforce it; LLMR’s parser recovers from fences or pre/post
+text.</p>
 <hr />
 </div>
-<div id="schema-mode-that-actually-works-groq-open-model" class="section level3">
-<h3>2) <strong>Schema mode that actually works</strong> (Groq, open
+<div id="schema-constrained-output-on-groq-open-model" class="section level3">
+<h3>2) <strong>Schema-constrained output on Groq</strong> (open
 model)</h3>
 <p>Groq serves <code>openai/gpt-oss-20b</code> with OpenAI-compatible
 APIs. Their <strong>Structured Outputs</strong> feature enforces JSON

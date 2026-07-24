@@ -344,14 +344,13 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
-<p>This vignette shows basic chat usage with four models across two open
-providers: - DeepSeek: deepseek-chat - DeepSeek: deepseek-reasoner -
-Groq: llama-3.1-8b-instant - Groq: openai/gpt-oss-20b</p>
-<p>You will need API keys in these environment variables:
-DEEPSEEK_API_KEY, GROQ_API_KEY.</p>
-<p>To run these examples locally, set a local flag: -
-Sys.setenv(LLMR_RUN_VIGNETTES = “true”) - or add LLMR_RUN_VIGNETTES=true
-to ~/.Renviron</p>
+<p>A stateful conversation is useful when a later question depends on
+earlier instructions or replies. <code>chat_session()</code> retains
+that context across turns and provides access to the resulting
+conversation history.</p>
+<p>The examples use two DeepSeek models and two Groq-hosted models. To
+run them, set <code>DEEPSEEK_API_KEY</code>, <code>GROQ_API_KEY</code>,
+and <code>LLMR_RUN_VIGNETTES=true</code> in the R environment.</p>
 <div id="deepseek-deepseek-chat" class="section level2">
 <h2>DeepSeek: deepseek-chat</h2>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>

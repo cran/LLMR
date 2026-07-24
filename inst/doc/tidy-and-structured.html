@@ -344,11 +344,14 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>  <span class="at">collapse =</span> <span class="cn">TRUE</span>, <span class="at">comment =</span> <span class="st">&quot;#&gt;&quot;</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  <span class="at">eval =</span> <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>)</span></code></pre></div>
-<p>We will show both unstructured and structured pipelines, using open
-models: - deepseek-chat (DeepSeek) - llama-3.1-8b-instant (Groq) -
-openai/gpt-oss-20b (Groq)</p>
-<p>You will need environment variables DEEPSEEK_API_KEY and
-GROQ_API_KEY.</p>
+<p>Many studies apply one measurement instruction to each value in a
+vector or each row in a data frame. <code>llm_fn()</code> and
+<code>llm_mutate()</code> express that operation, while their structured
+variants return named fields for subsequent analysis.</p>
+<p>This vignette compares unstructured and structured pipelines with one
+DeepSeek model and two Groq-hosted models. Live examples require
+<code>DEEPSEEK_API_KEY</code>, <code>GROQ_API_KEY</code>, and
+<code>LLMR_RUN_VIGNETTES=true</code> in the R environment.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>

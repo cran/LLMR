@@ -44,7 +44,7 @@ knitr::opts_chunk$set(
 #     user_prompts = c("Classify: 'great work'", "Classify: 'do better'")
 #   )
 # )
-# cat(llm_methods_text(res, task = "to classify short feedback messages"))
+# cat(report(res, task = "to classify short feedback messages"))
 
 ## ----usage--------------------------------------------------------------------
 # llm_usage(res)

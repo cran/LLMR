@@ -22,7 +22,7 @@ data-frame pipelines see `vignette("tidy-and-structured")`; for enforced JSON
 shapes, `vignette("about-schema")`; for logging, replication, caching, and
 batch jobs, `vignette("reproducibility-and-cost")`.)
 
-One caveat up front: provider support varies. Tool calling works on the
+Provider support varies. Tool calling works on the
 OpenAI-compatible providers and Anthropic; streaming works across the major
 providers; logprobs are the patchiest -- OpenAI and DeepSeek expose them,
 Anthropic does not, and several hosts reject the flag model by model. The
@@ -82,7 +82,7 @@ The answer quotes numbers the model could only have obtained by calling the
 function. Every execution is on the record:
 
 ```{r tool-history}
-attr(r, "tool_history")
+r$tool_history
 ```
 
 Two accounting details deserve attention. First, a tool loop is *several*
@@ -90,7 +90,7 @@ model calls, so `tokens(r)` -- which describes the final call only -- would
 undercount it. The aggregate is attached to the response:
 
 ```{r tool-loop-spend}
-attr(r, "tool_loop")
+r$tool_loop
 ```
 
 Second, a loop can run away: a confused model may call tools again and
@@ -101,7 +101,7 @@ to `"tool"` marks an *intermediate* state -- a response asking for tools, not
 a final answer; `call_llm_tools()` handles those for you, and you only meet
 them if you drive the loop yourself with `tool_calls()`.
 
-A privacy note: `tool_history` (and the audit log, if enabled) records tool
+A privacy note: `tool_history` (and the call log, if enabled) records tool
 arguments and results verbatim. If tools touch sensitive data, treat those
 records with the same care as the data.
 
@@ -160,7 +160,7 @@ alts <- lp$top_logprobs[[1]]
 transform(alts, p = exp(logprob))[, c("token", "p")]
 ```
 
-Two cautions keep this honest. Logprobs are *token-level*, not semantic:
+Two limitations. Logprobs are *token-level*, not semantic:
 the figure is the probability of that token in that position, which tracks
 "confidence in the label" only when the prompt constrains the answer to a
 single label token -- hence the one-word instruction above. For multi-token
@@ -169,11 +169,11 @@ high probability means the model was sure, not that it was right; on
 well-posed items the interesting observations are precisely the low-`p`
 cases, which are natural candidates for human review.
 
-## Where the other machinery lives
+## Related features
 
 These three features compose with everything else: a tool loop streams its
 final answer no differently, a logprobs request travels through
-`call_llm_par()` like any config, and all of it lands in the audit log when
+`call_llm_par()` like any config, and all of it lands in the call log when
 `llm_log_enable()` is on. For that log, replication helpers, cost
 accounting, prompt caching, and the half-price batch APIs, continue with
 `vignette("reproducibility-and-cost")`.

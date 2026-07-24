@@ -20,6 +20,8 @@ llm_config(
 \code{"openai"}, \code{"anthropic"}, \code{"gemini"}, \code{"groq"}, \code{"together"},
 \code{"deepseek"}, \code{"xai"}, \code{"xiaomi"}, \code{"alibaba"} (Alibaba Cloud DashScope,
 OpenAI-compatible mode; serves the Qwen models), \code{"zhipu"}, \code{"moonshot"},
+\code{"openrouter"} (an aggregator routing one OpenAI-compatible interface to
+many hosted models; model ids like \code{"openai/gpt-4o-mini"}),
 \code{"voyage"} (embeddings only), and \code{"ollama"} (local server, usually
 keyless). Other names are accepted and routed through the
 OpenAI-compatible path.
@@ -50,7 +52,9 @@ stored as \code{api_url} in \code{model_params} and overrides the default endpoi
 
 \item{embedding}{\code{NULL} (default), \code{TRUE}, or \code{FALSE}. If \code{TRUE}, the call
 is routed to the provider's embeddings API; if \code{FALSE}, to the chat API.
-If \code{NULL}, LLMR infers embeddings when \code{model} contains \code{"embedding"}.}
+Voyage is always routed to embeddings because it is an embeddings-only
+provider. For other providers, \code{NULL} infers embeddings when \code{model}
+contains \code{"embedding"}.}
 
 \item{no_change}{Logical. If \code{TRUE}, LLMR \strong{never} auto-renames/adjusts
 provider parameters. If \code{FALSE} (default), well-known compatibility shims

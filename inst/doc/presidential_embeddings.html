@@ -352,11 +352,14 @@ Embeddings</h1>
 <span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a>run_llmr_vignette <span class="ot">&lt;-</span></span>
 <span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>  <span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">&quot;LLMR_RUN_VIGNETTES&quot;</span>, <span class="st">&quot;false&quot;</span>)), <span class="st">&quot;true&quot;</span>) <span class="sc">&amp;&amp;</span></span>
 <span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a>  <span class="sc">!</span>is_package_check</span></code></pre></div>
-<p>This vignette demonstrates how to use LLMR for embedding analysis of
-presidential inaugural speeches.</p>
-<p><strong>Note:</strong> This vignette requires a valid Gemini API key
-and never runs live API calls during package checks. To run it locally,
-set <code>LLMR_RUN_VIGNETTES=true</code> before rendering.</p>
+<p>Which selected inaugural-address excerpts are closest in an embedding
+space? This vignette represents the excerpts as vectors and compares
+their cosine similarity. Similarity among these selected excerpts is not
+a measure of presidential rhetoric in general; it describes these
+passages under one embedding model and preprocessing workflow.</p>
+<p>Live calls require <code>GEMINI_API_KEY</code> and
+<code>LLMR_RUN_VIGNETTES=true</code> in the R environment. They do not
+run during package checks.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(LLMR)</span></code></pre></div>
 <div id="prepare-the-text-data" class="section level2">
 <h2>Prepare the Text Data</h2>
