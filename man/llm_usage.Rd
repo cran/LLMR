@@ -18,9 +18,20 @@ current prices, holding columns \code{model}, \code{input}, and \code{output} (U
 per \strong{million} tokens), and optionally \code{cached} (price per million cached
 prompt tokens). When given, a \code{cost_estimate} column is added: cached
 tokens are billed at the \code{cached} rate (or the \code{input} rate if no \code{cached}
-column), the remaining sent tokens at \code{input}, and received tokens at
-\code{output}. LLMR ships no price list on purpose; prices change, and a stale
-bundled table would mislead silently.}
+column), the remaining sent tokens at \code{input}, and everything beyond the
+prompt (\code{total_tokens - sent_tokens} when both are known, which includes
+Gemini's thinking tokens; otherwise the received tokens) at \code{output}. For
+Anthropic rows, whose sent count already excludes cache reads, all sent
+tokens are billed at \code{input}. The provider of a row is read from \code{x}'s
+\code{provider} column, which \code{\link[=call_llm_par]{call_llm_par()}} results carry, or else from an
+optional \code{provider} column of \code{price_table}; results of \code{\link[=llm_mutate]{llm_mutate()}},
+\code{\link[=llm_fn]{llm_fn()}}, and \code{\link[=llm_batch_fetch]{llm_batch_fetch()}} need the latter for Anthropic models,
+and rows with cached tokens and no known provider draw a warning. Rates
+must be numeric, finite, and
+nonnegative, and each model may appear once; a missing \code{cached} rate is
+allowed only for models whose rows have no cached tokens. Cache-write
+charges are not included. LLMR ships no price list, because prices change
+and a bundled table would go out of date without notice.}
 }
 \value{
 A one-row tibble: \code{n}, \code{n_ok}, \code{n_failed}, \code{ok_rate}, \code{n_truncated}
@@ -28,8 +39,10 @@ A one-row tibble: \code{n}, \code{n_ok}, \code{n_failed}, \code{ok_rate}, \code{
 \code{rec_tokens}, \code{total_tokens}, \code{reasoning_tokens}, \code{cached_tokens}
 (prompt tokens served from the provider's cache, when reported),
 \code{n_unknown_tokens}
-(successful rows for which the provider reported no token usage, so the
-token sums above understate the truth), \code{duration_s}, (when a batch id
+(rows whose sent, received, or total count was not reported, so the token
+sums above understate the truth by those rows; failed calls count here
+when their usage is missing, although providers usually do not bill
+them, and skipped rows and batch follow-on rows do not), \code{duration_s}, (when a batch id
 column is present) \code{rowpack_calls} and \code{rows_per_rowpack}, and (when
 \code{price_table} is supplied) \code{cost_estimate} in the table's currency.
 }

@@ -79,7 +79,15 @@ test_that(".token_counts keeps Gemini prompt tokens when candidates absent", {
                                  totalTokenCount = 1200L))   # no candidatesTokenCount
   tc <- LLMR:::.token_counts(j)
   expect_identical(tc$sent, 1000L)
-  expect_identical(tc$rec, 200L)        # derived from total - prompt, parenthesized
+  # Gemini omits zero counts, so the visible output is 0; the other 200 tokens
+  # (thoughts or tool use) stay in the total and are billed as output
+  expect_identical(tc$rec, 0L)
+  x <- tibble::tibble(model = "g", success = TRUE, finish_reason = "stop",
+                      sent_tokens = 1000L, rec_tokens = 0L, total_tokens = 1200L,
+                      cached_tokens = NA_integer_)
+  cost <- llm_usage(x, price_table = data.frame(model = "g", input = 1,
+                                                output = 10))$cost_estimate
+  expect_equal(cost, (1000 * 1 + 200 * 10) / 1e6)
 })
 
 test_that(".token_counts derivation is not corrupted by operator precedence", {
@@ -101,4 +109,71 @@ test_that("print.llmr_response prints a status line for non-standard finish reas
   out <- capture.output(print(r))
   expect_true(any(nzchar(out)))                  # the status line did not vanish
   expect_true(any(grepl("finish=end_turn", out, fixed = TRUE)))
+})
+
+test_that("uncaught API errors render at top level despite a list payload", {
+  # 0.8.11 stored the parsed provider payload under `body`, a condition field
+  # rlang reserves for message bullets; signal_abort() then failed inside
+  # cnd_body() and masked the real message for every uncaught API error.
+  cnd <- rlang::catch_cnd(
+    LLMR:::.llmr_error(
+      "LLM API request failed.\nHTTP status: 400\nReason: quota reached.",
+      category = "param", status_code = 400L, provider = "anthropic",
+      model = "m",
+      response_body = list(type = "error",
+                           error = list(type = "invalid_request_error",
+                                        message = "quota reached."))
+    )
+  )
+  expect_s3_class(cnd, "llmr_api_param_error")
+  expect_identical(cnd$response_body$error$message, "quota reached.")
+  expect_null(cnd$body)
+  # the exact path signal_abort() takes when the error is not caught
+  expect_no_error(rlang::cnd_message(cnd, inherit = TRUE, prefix = TRUE))
+  expect_match(conditionMessage(cnd), "quota reached")
+})
+
+test_that("metadata-only logging keeps generation parameters", {
+  log <- tempfile(fileext = ".jsonl")
+  old <- options(llmr.log_file = log, llmr.log_messages = FALSE)
+  on.exit(options(old), add = TRUE)
+  fake_request <- list(body = list(data = list(
+    model = "m1", temperature = 0.3, max_tokens = 64,
+    messages = list(list(role = "user", content = "confidential corpus text"))
+  )))
+  LLMR:::.llmr_log_event(kind = "call", provider = "openai", model = "m1",
+                         status = 200L, request = fake_request)
+  line <- readLines(log, warn = FALSE)
+  rec <- jsonlite::fromJSON(line[[1]])
+  expect_equal(rec$parameters$temperature, 0.3)
+  expect_equal(rec$parameters$max_tokens, 64)
+  expect_false(grepl("confidential corpus text", line[[1]], fixed = TRUE))
+  expect_null(rec$request)
+
+  # With messages included, the full body is stored alongside the parameters.
+  options(llmr.log_messages = TRUE)
+  LLMR:::.llmr_log_event(kind = "call", provider = "openai", model = "m1",
+                         status = 200L, request = fake_request)
+  line2 <- readLines(log, warn = FALSE)[[2]]
+  expect_true(grepl("confidential corpus text", line2, fixed = TRUE))
+  expect_true(grepl("\"parameters\"", line2, fixed = TRUE))
+})
+
+test_that("a failed log write warns once and is counted", {
+  dir <- tempfile("logdir-")
+  dir.create(dir)
+  old <- options(llmr.log_file = dir, llmr.log_messages = FALSE)
+  on.exit(options(old), add = TRUE)
+  old_failures <- LLMR:::.llmr_log_state$failures
+  assign("failures", 0L, envir = LLMR:::.llmr_log_state)
+  on.exit(assign("failures", old_failures, envir = LLMR:::.llmr_log_state), add = TRUE)
+  expect_warning(
+    LLMR:::.llmr_log_event(kind = "call", provider = "p", model = "m"),
+    "audit logging failed")
+  expect_silent(
+    LLMR:::.llmr_log_event(kind = "call", provider = "p", model = "m"))
+  expect_identical(LLMR:::.llmr_log_state$failures, 2L)
+  # the counter is package state, not a user option
+  expect_null(getOption("llmr.log_failures"))
+  expect_message(llm_log_status(), "2 logging write")
 })

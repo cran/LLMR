@@ -23,18 +23,25 @@
 #'
 #' Creates a typed error with a category-specific subclass, plus a common
 #' `llmr_api_error` base class. Extra fields (e.g., `param`) are attached
-#' as condition attributes for handlers to inspect.
+#' as condition attributes for handlers to inspect. The parsed provider
+#' payload travels as `response_body`; the name `body` is reserved by rlang
+#' for message bullets (character or function), and storing a list there
+#' breaks the top-level display of any uncaught error.
 #'
 #' Classes produced:
 #'   - llmr_api_param_error
 #'   - llmr_api_auth_error
+#'   - llmr_api_billing_error
 #'   - llmr_api_rate_limit_error
 #'   - llmr_api_server_error
 #'   - llmr_api_unknown_error
 #'
+#' `class` prepends further classes (for example `llmr_stream_error`), and named
+#' arguments in `...` become further condition fields.
+#'
 #' @keywords internal
 #' @noRd
-.llmr_error <- function(message, category = c("param","auth","rate_limit","server","unknown"),
+.llmr_error <- function(message, category = c("param","auth","billing","rate_limit","server","unknown"),
                         status_code = NA_integer_,
                         provider = NA_character_,
                         model = NA_character_,
@@ -42,10 +49,14 @@
                         code = NA_character_,
                         request_id = NA_character_,
                         retry_after = NA_real_,
-                        body = NULL) {
+                        response_body = NULL,
+                        class = NULL,
+                        call = rlang::caller_env(),
+                        ...) {
 
   category <- match.arg(category)
   cls <- c(
+    class,
     paste0("llmr_api_", category, "_error"),
     "llmr_api_error", "error", "condition"
   )
@@ -60,6 +71,7 @@
     cli::cli_abort(
       message = safe_message,
       class   = cls,
+      call    = call,
       # attach fields for tryCatch handlers
       status_code = status_code,
       provider    = provider,
@@ -68,12 +80,14 @@
       code        = code,
       request_id  = request_id,
       retry_after = retry_after,
-      body        = body
+      response_body = response_body,
+      ...
     )
   } else {
     rlang::abort(
       message = message,
       class   = cls,
+      call    = call,
       status_code = status_code,
       provider    = provider,
       model       = model,
@@ -81,7 +95,8 @@
       code        = code,
       request_id  = request_id,
       retry_after = retry_after,
-      body        = body
+      response_body = response_body,
+      ...
     )
   }
 }
@@ -206,8 +221,10 @@ call_llm_robust <- function(config, messages,
   # on a second attempt.
   is_retryable_error <- function(e) {
     # Typed LLMR conditions carry an exact category: rate limits and server
-    # errors are transient; param/auth/unknown are permanent, whatever their
-    # message text happens to contain (e.g., "context length exceeded").
+    # errors are transient; param/auth/billing/unknown are permanent, whatever
+    # their message text happens to contain (e.g., "context length exceeded").
+    # Billing blocks in particular cannot clear on a retry: the account has to
+    # change first.
     if (inherits(e, "llmr_api_rate_limit_error") || inherits(e, "llmr_api_server_error")) {
       return(TRUE)
     }

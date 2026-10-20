@@ -7,27 +7,62 @@
 llm_par_resume(results, tries = 3, ...)
 }
 \arguments{
-\item{results}{Output from \code{\link[=call_llm_par]{call_llm_par()}} (must contain \code{config}, \code{messages},
-and \code{success} columns).}
+\item{results}{A result data frame from \code{\link[=call_llm_par]{call_llm_par()}} containing
+\code{config}, \code{messages}, and \code{success}.}
 
-\item{tries}{Number of retries per call. Default 3.}
+\item{tries}{Total number of attempts allowed for each repeated call,
+including its first attempt. The default is 3. See \code{\link[=call_llm_robust]{call_llm_robust()}}.}
 
-\item{...}{Passed to \code{\link[=call_llm_par]{call_llm_par()}}.}
+\item{...}{Other arguments passed to \code{\link[=call_llm_par]{call_llm_par()}}. \code{simplify} is
+fixed at \code{FALSE} and must not be supplied here.}
 }
 \value{
-The patched data frame with re-run results filled in.
+After input validation, a data frame with existing result columns
+patched at the repeated row positions. A repeated call may fail again.
+Columns returned by the new calls but absent from \code{results} are not
+added. Other rows retain their values.
+
+When calls are repeated, the result has class \code{llmr_experiment}.
+When no row needs to be repeated, the original object is returned
+unchanged with a message.
 }
 \description{
-Finds rows where \code{success} is \code{FALSE} or \code{NA} in the output of \code{\link[=call_llm_par]{call_llm_par()}},
-re-runs them, and patches the results back into the original data frame.
+Repeats calls for rows whose \code{success} value is not \code{TRUE} and patches
+their results into the supplied data frame.
+}
+\details{
+Selection depends on \code{success}, not \code{finish_reason}. Truncated and
+content-filtered replies returned with \code{success = TRUE} are retained.
+To repeat such a request, pass its \code{config} and \code{messages} columns to
+\code{\link[=call_llm_par]{call_llm_par()}}. For a token-limit truncation, increase \code{max_tokens}
+in the configuration before repeating the request.
+
+The function rejects names consisting of a recognized result-column
+name followed by a numeric suffix, such as \code{success.1} or \code{duration.1}.
+These names can indicate a collision between input and result columns.
+Rename conflicting input columns before the original \code{\link[=call_llm_par]{call_llm_par()}}
+call. This check also applies when no row needs to be repeated.
+
+When both \code{structured_ok} and \code{structured_data} are present, they are
+recomputed for the repeated rows. Extracted structured fields are not
+replaced. When calls are repeated, the presence of this diagnostic pair
+produces a warning, whether or not fields were extracted.
+
+Tag diagnostics and extracted tag columns are not recomputed. When calls
+are repeated, a warning is issued if both \code{tags_ok} and \code{tags_data} are
+present.
+
+To replace extracted fields, remove their old columns and use
+\code{\link[=llm_parse_structured_col]{llm_parse_structured_col()}} or \code{\link[=llm_parse_tags_col]{llm_parse_tags_col()}} with the original
+extraction specification. If the old columns remain, the parsers write
+extracted values to new names with suffixes.
 }
 \examples{
 \dontrun{
 results <- call_llm_par(experiments)
 results <- llm_par_resume(results, tries = 3)
 }
-
 }
 \seealso{
-\code{\link[=call_llm_par]{call_llm_par()}}
+\code{\link[=call_llm_par]{call_llm_par()}}, \code{\link[=llm_failures]{llm_failures()}}
 }

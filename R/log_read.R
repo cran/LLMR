@@ -26,11 +26,17 @@
 #' canonical turns and generation parameters, so a call read from a log and the
 #' same call described by a config hash identically.
 #'
+#' Reading is strict: a line that is not a JSON object, or a record whose
+#' metadata fields are not single values, stops with an error that names the
+#' line of the file, the field, and the reason. Blank lines are ignored but
+#' still counted, so the line numbers match the file.
+#'
 #' @param log Path to a JSONL audit log.
-#' @return A list with `records` (a list of `list(raw=, rec=)`, one per line) and
-#'   `manifest` (a tibble with `idx`, `ts`, `kind`, `provider`, `model`,
-#'   `model_version`, `status`, `schema_version`, `has_payload`, `request_hash`,
-#'   `record_hash`).
+#' @return A list with `records` (a list of `list(raw=, rec=)`, one per
+#'   nonblank line) and `manifest` (a tibble with `idx`, `ts`, `kind`,
+#'   `provider`, `model`, `model_version`, `status`, `schema_version`,
+#'   `has_payload`, `request_hash`, `record_hash`, and `line`, the record's
+#'   line number in the file).
 #' @seealso [llm_request_hash()], [llm_log_enable()]
 #' @examples
 #' # In practice the log comes from llm_log_enable("study.jsonl"); here one
@@ -53,21 +59,33 @@ llm_log_read <- function(log) {
     rlang::abort(sprintf("Log file not found: %s", log))
   }
   lines <- readLines(log, warn = FALSE)
-  lines <- lines[nzchar(trimws(lines))]
+  line_no <- which(nzchar(trimws(lines)))
+  lines <- lines[line_no]
   if (!length(lines)) rlang::abort("The log contains no records.")
 
   records <- lapply(seq_along(lines), function(i) {
     ln <- lines[[i]]
     rec <- tryCatch(jsonlite::fromJSON(ln, simplifyVector = FALSE),
-                    error = function(e) NULL)
-    if (is.null(rec)) {
-      rlang::abort(sprintf("Log line %d is not valid JSON; the file may be corrupted.", i))
+                    error = function(e) e)
+    if (inherits(rec, "error")) {
+      rlang::abort(sprintf("Log line %d is not valid JSON; the file may be corrupted.",
+                           line_no[[i]]), parent = rec)
     }
+    .llmr_check_log_record(rec, line_no[[i]])
     list(raw = ln, rec = rec)
   })
 
   manifest <- do.call(rbind, lapply(seq_along(records), function(i) {
     r <- records[[i]]$rec
+    request_hash <- if (is.null(r[["request"]])) NA_character_ else
+      tryCatch(
+        llm_request_hash(
+          provider = r$provider, model = r$model,
+          messages = .llmr_turns(provider = r$provider, request = r[["request"]]),
+          extra = list(params = .llmr_body_params(r[["request"]]))),
+        error = function(e) rlang::abort(
+          sprintf("Log line %d: field `request` cannot be read.", line_no[[i]]),
+          parent = e))
     tibble::tibble(
       idx            = i,
       ts             = as.character(r$ts %||% NA_character_),
@@ -78,13 +96,9 @@ llm_log_read <- function(log) {
       status         = as.integer(r$status %||% NA_integer_),
       schema_version = as.character(r$schema_version %||% NA_character_),
       has_payload    = !is.null(r[["request"]]) || !is.null(r$text),
-      request_hash   = if (is.null(r[["request"]])) NA_character_ else
-                         llm_request_hash(
-                           provider = r$provider, model = r$model,
-                           messages = .llmr_turns(
-                             provider = r$provider, request = r[["request"]]),
-                           extra = list(params = .llmr_body_params(r[["request"]]))),
-      record_hash    = .llmr_line_hash(records[[i]]$raw)
+      request_hash   = request_hash,
+      record_hash    = .llmr_line_hash(records[[i]]$raw),
+      line           = line_no[[i]]
     )
   }))
 
@@ -110,16 +124,22 @@ llm_log_read <- function(log) {
 #' @param record A parsed log record: a list with at least `provider`, `model`,
 #'   and `request` (as found in `llm_log_read(x)$records[[i]]$rec`).
 #' @param on_unsupported What to do when the request body uses a shape this
-#'   reconstructor does not cover (so the rebuilt messages would be empty or
-#'   lossy) -- chiefly the OpenAI Responses API (`input`/`instructions`) and
-#'   non-text content blocks (images, files). `"error"` (default) aborts;
-#'   `"warn"` warns and returns the best-effort result; `"quiet"` returns it
-#'   silently. Failing loudly is the default because a silently empty replay is
-#'   worse than none.
-#' @return A list with `config` (an [llm_config()]), `messages` (a named
-#'   character vector of role/content turns), and `complete` (a logical: `TRUE`
-#'   when the body was fully reconstructed, `FALSE` when content was dropped).
-#'   `NULL` when the record carries no request body.
+#'   reconstructor does not cover, so the rebuilt messages would be empty or
+#'   lack a turn's content (`complete = FALSE`) -- chiefly the OpenAI Responses
+#'   API (`input`/`instructions`) and turns whose only content is a non-text
+#'   block. `"error"` (default) aborts; `"warn"` warns and returns the
+#'   best-effort result; `"quiet"` returns it silently. Failing loudly is the
+#'   default because a silently empty replay is worse than none.
+#' @return A list with `config` (an [llm_config()]), `messages`, `complete`,
+#'   and `reissuable`; `NULL` when the record carries no request body.
+#'   `messages` is a character vector of turns named by role, or, when a turn
+#'   carries non-text content, a list of turns whose attachments are kept only
+#'   as hashes. `complete` is `TRUE` when every turn was recovered with its
+#'   text and attachment hashes, which is what [llm_request_hash()] needs.
+#'   `reissuable` is `TRUE` when the rebuilt messages can also be sent again as
+#'   the original request: it is `FALSE` when the record has attachments (only
+#'   their hashes survive), tool calls or tool results (which are dropped), or a
+#'   role mapped with loss (such as `developer` to `system`).
 #' @seealso [llm_log_read()], [llm_request_hash()]
 #' @examples
 #' rec <- list(provider = "openai", model = "gpt-4o-mini",
@@ -162,5 +182,68 @@ llm_request_from_log <- function(record,
     cli::cli_warn(msg)
   }
 
-  list(config = cfg, messages = messages, complete = complete)
+  list(config = cfg, messages = messages, complete = complete,
+       reissuable = complete && .llmr_request_reissuable(req, turns))
+}
+
+# Internal: can the turns rebuilt from a logged body be sent again as the
+# original request? Not when a turn carries attachments (only their hashes
+# survive), when the body holds tool calls or tool results (dropped by the
+# turn canonicalization), or when a role was mapped with loss.
+.llmr_request_reissuable <- function(req, turns) {
+  if (any(vapply(turns, function(t) length(t$non_text %||% character()) > 0L, logical(1)))) {
+    return(FALSE)
+  }
+  msgs <- c(req$messages %||% list(), req$contents %||% list())
+  tool_types <- c("tool_use", "tool_result", "server_tool_use", "web_search_tool_result")
+  for (m in msgs) {
+    if (!is.list(m)) next
+    role <- tolower(as.character(m$role %||% "user")[1])
+    if (!role %in% c("user", "assistant", "model", "system")) return(FALSE)
+    if (!is.null(m$tool_calls) || !is.null(m$tool_call_id) || !is.null(m$function_call)) {
+      return(FALSE)
+    }
+    blocks <- m$content %||% m$parts
+    if (is.list(blocks)) {
+      for (b in blocks) {
+        if (is.list(b) && (isTRUE(b$type %in% tool_types) ||
+                           !is.null(b$functionCall) || !is.null(b$functionResponse))) {
+          return(FALSE)
+        }
+      }
+    }
+  }
+  TRUE
+}
+
+# A log record must be a JSON object whose metadata fields, when present, are
+# single values, and whose request, when present, is an object. Anything else
+# stops here with the file's line number, rather than failing later with an
+# unrelated error or a manifest built from the wrong shape.
+.llmr_check_log_record <- function(rec, line) {
+  if (!is.list(rec) || (length(rec) && is.null(names(rec)))) {
+    what <- if (is.list(rec)) "an array" else sprintf("a %s value", class(rec)[1])
+    rlang::abort(sprintf("Log line %d is %s, not a JSON object.", line, what))
+  }
+  scalar <- c("ts", "kind", "provider", "model", "model_version",
+              "schema_version", "status")
+  for (f in intersect(scalar, names(rec))) {
+    v <- rec[[f]]
+    if (is.null(v)) next
+    if (is.list(v) || length(v) != 1L) {
+      rlang::abort(sprintf("Log line %d: field `%s` must be a single value, not %s.",
+                           line, f, if (is.list(v)) "an object or array"
+                                    else sprintf("%d values", length(v))))
+    }
+  }
+  st <- rec[["status"]]
+  if (!is.null(st) && is.na(suppressWarnings(as.integer(st))) && !is.na(st)) {
+    rlang::abort(sprintf("Log line %d: field `status` must be an HTTP status number, not %s.",
+                         line, encodeString(as.character(st), quote = '"')))
+  }
+  req <- rec[["request"]]
+  if (!is.null(req) && (!is.list(req) || (length(req) && is.null(names(req))))) {
+    rlang::abort(sprintf("Log line %d: field `request` must be a JSON object.", line))
+  }
+  invisible(TRUE)
 }

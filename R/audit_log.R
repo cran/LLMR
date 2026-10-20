@@ -54,20 +54,23 @@
 #'   the reply text are stored. If `FALSE`, only metadata is stored.
 #' @return `llm_log_enable()` and `llm_log_disable()` return the previous log
 #'   path invisibly. `llm_log_status()` returns the active path or `NULL`,
-#'   invisibly, after printing a one-line status.
+#'   invisibly, after reporting the status as a message.
 #' @seealso [llm_usage()] for token summaries, [report()] for a
 #'   draft methods paragraph.
 #' @export
 #' @examples
-#' \dontrun{
-#' llm_log_enable("annotation_run.jsonl")
-#' cfg <- llm_config("groq", "openai/gpt-oss-20b")
-#' call_llm(cfg, "One word: capital of France?")
-#' llm_log_disable()
-#'
-#' # Read the log back as a data frame
-#' log_df <- jsonlite::stream_in(file("annotation_run.jsonl"), verbose = FALSE)
+#' log <- tempfile(fileext = ".jsonl")
+#' llm_log_enable(log)
+#' llm_log_status()
+#' \donttest{
+#' if (nzchar(Sys.getenv("GROQ_API_KEY"))) {
+#'   cfg <- llm_config("groq", "openai/gpt-oss-20b")
+#'   call_llm(cfg, "One word: capital of France?")
+#'   # Read the log back as records and a manifest
+#'   llm_log_read(log)$manifest
 #' }
+#' }
+#' llm_log_disable()
 llm_log_enable <- function(path = "llmr_log.jsonl", include_messages = TRUE) {
   stopifnot(is.character(path), length(path) == 1L, nzchar(path))
   writable <- tryCatch({
@@ -84,6 +87,11 @@ llm_log_enable <- function(path = "llmr_log.jsonl", include_messages = TRUE) {
   invisible(old)
 }
 
+# Session state of the audit log that is not a user setting: the number of
+# failed log writes, reported by llm_log_status().
+.llmr_log_state <- new.env(parent = emptyenv())
+.llmr_log_state$failures <- 0L
+
 #' @rdname llm_log_enable
 #' @export
 llm_log_disable <- function() {
@@ -97,11 +105,16 @@ llm_log_disable <- function() {
 llm_log_status <- function() {
   p <- getOption("llmr.log_file")
   if (is.null(p)) {
-    cat("LLMR audit log: disabled\n")
+    message("LLMR audit log: disabled")
   } else {
-    cat("LLMR audit log: writing to", p,
-        if (isTRUE(getOption("llmr.log_messages", TRUE))) "(messages included)\n"
-        else "(metadata only)\n")
+    message("LLMR audit log: writing to ", p,
+            if (isTRUE(getOption("llmr.log_messages", TRUE))) " (messages included)"
+            else " (metadata and parameters only)")
+  }
+  failures <- .llmr_log_state$failures
+  if (failures > 0L) {
+    message(sprintf("  %d logging write(s) failed this session; those calls ran but were not recorded.",
+                    failures))
   }
   invisible(p)
 }
@@ -187,8 +200,26 @@ llm_log_merge <- function(path) {
   x
 }
 
+# Message-bearing body fields, across the provider request shapes. Everything
+# else in a request body is a generation parameter or identifier and stays in
+# the record even when messages are excluded.
+.llmr_log_message_fields <- c("messages", "input", "contents", "system",
+                              "systemInstruction", "system_instruction",
+                              "prompt", "text", "tools")
+
+# Internal: the generation parameters of a request body -- the body minus its
+# message-bearing fields, scrubbed of inline data.
+.llmr_log_params <- function(body) {
+  if (!is.list(body)) return(NULL)
+  params <- body[setdiff(names(body), .llmr_log_message_fields)]
+  if (!length(params)) return(NULL)
+  .llmr_log_scrub(params)
+}
+
 # Internal: append one record to the audit log, if enabled. Never errors:
-# logging must not be able to break a call that succeeded.
+# logging must not be able to break a call that succeeded. A failed write is
+# counted and warned about once, because a silently unlogged call defeats the
+# audit log's purpose.
 .llmr_log_event <- function(kind,
                             provider = NULL, model = NULL, status = NULL,
                             request = NULL, response = NULL,
@@ -196,7 +227,7 @@ llm_log_merge <- function(path) {
   path <- getOption("llmr.log_file")
   if (is.null(path)) return(invisible(NULL))
   path <- .llmr_log_path(path)
-  ok <- try({
+  err <- tryCatch({
     include_msgs <- isTRUE(getOption("llmr.log_messages", TRUE))
     rec <- list(
       ts             = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
@@ -207,9 +238,12 @@ llm_log_merge <- function(path) {
       model        = model,
       status       = status
     )
-    if (!is.null(request) && include_msgs) {
+    if (!is.null(request)) {
       body <- tryCatch(request$body$data, error = function(e) NULL)
-      if (!is.null(body)) rec$request <- .llmr_log_scrub(body)
+      if (!is.null(body)) {
+        rec$parameters <- .llmr_log_params(body)
+        if (include_msgs) rec$request <- .llmr_log_scrub(body)
+      }
     }
     if (inherits(response, "llmr_response")) {
       rec$model_version <- response$model_version
@@ -222,7 +256,21 @@ llm_log_merge <- function(path) {
     if (!is.null(error_message)) rec$error <- error_message
     if (!is.null(duration_s) && is.null(rec$duration_s)) rec$duration_s <- duration_s
     line <- jsonlite::toJSON(rec, auto_unbox = TRUE, null = "null", na = "null")
-    cat(line, "\n", sep = "", file = path, append = TRUE)
-  }, silent = TRUE)
+    # A failing connection warns before it errors; the error carries the
+    # story, and the counter's own once-only warning replaces the noise.
+    suppressWarnings(cat(line, "\n", sep = "", file = path, append = TRUE))
+    NULL
+  }, error = identity)
+  if (inherits(err, "error")) {
+    n <- .llmr_log_state$failures + 1L
+    .llmr_log_state$failures <- n
+    if (n == 1L) {
+      warning("The model call succeeded, but audit logging failed: ",
+              conditionMessage(err),
+              " (further logging failures are counted silently;",
+              " llm_log_status() reports the count).",
+              call. = FALSE)
+    }
+  }
   invisible(NULL)
 }

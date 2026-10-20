@@ -22,14 +22,19 @@ llm_config(
 OpenAI-compatible mode; serves the Qwen models), \code{"zhipu"}, \code{"moonshot"},
 \code{"openrouter"} (an aggregator routing one OpenAI-compatible interface to
 many hosted models; model ids like \code{"openai/gpt-4o-mini"}),
+\code{"meta"} (the Meta Model API, serving the Muse models such as
+\code{"muse-spark-1.3"}), \code{"llamacpp"} (a model on this computer, installed
+with \code{\link[=llm_local_install]{llm_local_install()}}; see \code{\link[=llm_local_models]{llm_local_models()}}),
 \code{"voyage"} (embeddings only), and \code{"ollama"} (local server, usually
 keyless). Other names are accepted and routed through the
 OpenAI-compatible path.
 
 When \code{api_key} is omitted, LLMR reads the key from the environment using a
 formulaic default: it tries \verb{<PROVIDER>_API_KEY} and then \verb{<PROVIDER>_KEY},
-upper-cased (e.g. \code{OPENAI_API_KEY}, or \code{ALIBABA_API_KEY}/\code{ALIBABA_KEY}). The
-one exception is Gemini with \code{vertex = TRUE}, which reads \code{VERTEX_ACCESS_TOKEN}.}
+upper-cased (e.g. \code{OPENAI_API_KEY}, or \code{ALIBABA_API_KEY}/\code{ALIBABA_KEY}).
+Gemini with \code{vertex = TRUE} reads \code{VERTEX_ACCESS_TOKEN} instead, and Meta
+also falls back to \code{MODEL_API_KEY}, the name used in Meta's own
+documentation.}
 
 \item{model}{Character scalar. Model name understood by the chosen provider.
 (e.g., \code{"gpt-4.1-nano"}, \code{"gpt-5-nano"}, \code{"gemini-2.5-flash-lite"},
@@ -87,7 +92,8 @@ return its reasoning; Anthropic returns thinking blocks whenever
 thinking is on. Returned reasoning lands in the response's
 \code{thinking} field.
 \item \code{timeout} -- total request timeout in seconds (default 600; also
-settable globally via \code{options(llmr.timeout = ...)}).
+settable globally via \code{options(llmr.timeout = ...)}). It must be
+one positive number; \code{Inf} removes the limit.
 \item \code{cache} -- set \code{cache = TRUE} to mark the system prompt and tools
 as cacheable for Anthropic (prompt caching). OpenAI, Gemini,
 DeepSeek, and several compatible providers cache long prompt

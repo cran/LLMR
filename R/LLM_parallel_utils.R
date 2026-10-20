@@ -541,6 +541,11 @@ call_llm_par <- function(experiments,
       stop(sprintf("Row %d 'config' is not an llm_config object.", i))
     }
   }
+  # Local models: start each server here, once, and hand the workers its
+  # address, so that workers neither start servers of their own nor ignore the
+  # settings chosen with llm_local_start(). The returned config column stays
+  # as given, so no server key is stored with the results.
+  .llmr_par_configs <- .llmr_local_prebind(experiments$config)
 
   if (is.null(max_workers)) {
     max_workers <- min(future::availableCores(omit = 1L), nrow(experiments))
@@ -599,7 +604,7 @@ call_llm_par <- function(experiments,
       Sys.sleep(stats::runif(1, 0, start_jitter))
 
     start_time <- Sys.time()
-    current_config   <- experiments$config[[i_val]]
+    current_config   <- .llmr_par_configs[[i_val]]
     current_messages <- experiments$messages[[i_val]]
     raw_json_str <- NA_character_
 
@@ -650,7 +655,7 @@ call_llm_par <- function(experiments,
       cod0 <- tryCatch(e$code,        error = function(...) NA)
       # the provider's raw error body, when the typed condition carries one,
       # is preserved in raw_response_json so failures stay inspectable
-      bod0 <- tryCatch(e$body, error = function(...) NULL)
+      bod0 <- tryCatch(e$response_body, error = function(...) NULL)
       raw_err_json <- if (!is.null(bod0)) {
         tryCatch(as.character(jsonlite::toJSON(bod0, auto_unbox = TRUE, null = "null")),
                  error = function(...) raw_json_str)
@@ -780,11 +785,22 @@ call_llm_par <- function(experiments,
   if (!all(c("config", "messages") %in% names(df))) {
     stop("`config` and `messages` columns are required to add `request_hash`.")
   }
+  why <- character(0)
   df$request_hash <- vapply(seq_len(nrow(df)), function(i) {
     tryCatch(
       llm_request_hash(config = df$config[[i]], messages = df$messages[[i]]),
-      error = function(e) NA_character_)
+      error = function(e) {
+        why[as.character(i)] <<- conditionMessage(e)
+        NA_character_
+      })
   }, character(1))
+  if (length(why)) {
+    rows <- names(why)
+    warning(sprintf("No request hash for %d row(s) (%s): %s",
+                    length(rows),
+                    paste(utils::head(rows, 10L), collapse = ", "),
+                    why[[1]]), call. = FALSE)
+  }
   df
 }
 
@@ -948,19 +964,13 @@ build_factorial_experiments <- function(configs,
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#'   # Automatic setup
-#'   setup_llm_parallel()
+#' # Two background workers, then back to sequential processing
+#' setup_llm_parallel(workers = 2, verbose = TRUE)
+#' reset_llm_parallel()
 #'
-#'   # Manual setup with specific workers
-#'   setup_llm_parallel(workers = 4, verbose = TRUE)
-#'
-#'   # Force sequential processing for debugging
-#'   setup_llm_parallel(strategy = "sequential")
-#'
-#'   # Restore old plan if needed
-#'   reset_llm_parallel()
-#' }
+#' # Sequential processing, for debugging
+#' setup_llm_parallel(strategy = "sequential")
+#' reset_llm_parallel()
 setup_llm_parallel <- function(workers = NULL, strategy = NULL, verbose = FALSE) {
 
   if (!requireNamespace("future", quietly = TRUE)) {
@@ -1018,18 +1028,11 @@ setup_llm_parallel <- function(workers = NULL, strategy = NULL, verbose = FALSE)
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#'   # Setup parallel processing
-#'   old_plan <- setup_llm_parallel(workers = 2)
-#'
-#'   # Do some parallel work...
-#'
-#'   # Reset to sequential
-#'   reset_llm_parallel(verbose = TRUE)
-#'
-#'   # Optionally restore the specific old_plan if it was non-sequential
-#'   # future::plan(old_plan)
-#' }
+#' old_plan <- setup_llm_parallel(workers = 2)
+#' # ... parallel calls with call_llm_par() ...
+#' reset_llm_parallel(verbose = TRUE)
+#' # To return to the plan in place before setup_llm_parallel():
+#' future::plan(old_plan)
 reset_llm_parallel <- function(verbose = FALSE) {
 
   if (!requireNamespace("future", quietly = TRUE)) {
@@ -1172,29 +1175,60 @@ llm_cross_design <- function(.data, configs, prompt = NULL, .messages = NULL, .s
 
 #' Resume failed parallel LLM calls
 #'
-#' Finds rows where `success` is `FALSE` or `NA` in the output of [call_llm_par()],
-#' re-runs them, and patches the results back into the original data frame.
+#' Repeats calls for rows whose `success` value is not `TRUE` and patches
+#' their results into the supplied data frame.
 #'
-#' @param results Output from [call_llm_par()] (must contain `config`, `messages`,
-#'   and `success` columns).
-#' @param tries Number of retries per call. Default 3.
-#' @param ... Passed to [call_llm_par()].
-#' @return The patched data frame with re-run results filled in.
+#' @details
+#' Selection depends on `success`, not `finish_reason`. Truncated and
+#' content-filtered replies returned with `success = TRUE` are retained.
+#' To repeat such a request, pass its `config` and `messages` columns to
+#' [call_llm_par()]. For a token-limit truncation, increase `max_tokens`
+#' in the configuration before repeating the request.
 #'
+#' The function rejects names consisting of a recognized result-column
+#' name followed by a numeric suffix, such as `success.1` or `duration.1`.
+#' These names can indicate a collision between input and result columns.
+#' Rename conflicting input columns before the original [call_llm_par()]
+#' call. This check also applies when no row needs to be repeated.
+#'
+#' When both `structured_ok` and `structured_data` are present, they are
+#' recomputed for the repeated rows. Extracted structured fields are not
+#' replaced. When calls are repeated, the presence of this diagnostic pair
+#' produces a warning, whether or not fields were extracted.
+#'
+#' Tag diagnostics and extracted tag columns are not recomputed. When calls
+#' are repeated, a warning is issued if both `tags_ok` and `tags_data` are
+#' present.
+#'
+#' To replace extracted fields, remove their old columns and use
+#' [llm_parse_structured_col()] or [llm_parse_tags_col()] with the original
+#' extraction specification. If the old columns remain, the parsers write
+#' extracted values to new names with suffixes.
+#'
+#' @param results A result data frame from [call_llm_par()] containing
+#'   `config`, `messages`, and `success`.
+#' @param tries Total number of attempts allowed for each repeated call,
+#'   including its first attempt. The default is 3. See [call_llm_robust()].
+#' @param ... Other arguments passed to [call_llm_par()]. `simplify` is
+#'   fixed at `FALSE` and must not be supplied here.
+#' @return After input validation, a data frame with existing result columns
+#'   patched at the repeated row positions. A repeated call may fail again.
+#'   Columns returned by the new calls but absent from `results` are not
+#'   added. Other rows retain their values.
+#'
+#'   When calls are repeated, the result has class `llmr_experiment`.
+#'   When no row needs to be repeated, the original object is returned
+#'   unchanged with a message.
 #' @examples
 #' \dontrun{
 #' results <- call_llm_par(experiments)
 #' results <- llm_par_resume(results, tries = 3)
 #' }
-#'
-#' @seealso [call_llm_par()]
+#' @seealso [call_llm_par()], [llm_failures()]
 #' @export
 llm_par_resume <- function(results, tries = 3, ...) {
-  # If the input frame had a column named like ANY diagnostic, call_llm_par()
-  # collision-renamed its own output (e.g. duration -> duration.1). The patch
-  # loop below matches columns by name, so it would overwrite the user's column
-  # with re-run diagnostics. Refuse up front (as the original guard did for
-  # 'success' only) rather than silently corrupt the frame.
+  # Suffixed diagnostics indicate a possible name collision. Reject them
+  # before selecting failures because patching by name could replace input data.
   diag_cols <- c("response_text", "raw_response_json", "success", "error_message",
                  "finish_reason", "sent_tokens", "rec_tokens", "total_tokens",
                  "reasoning_tokens", "cached_tokens", "response_id", "duration",
@@ -1244,13 +1278,15 @@ llm_par_resume <- function(results, tries = 3, ...) {
     results$structured_ok[failed_idx]   <- reparsed$structured_ok
     results$structured_data[failed_idx] <- reparsed$structured_data
     warning("Hoisted structured field columns are not re-extracted for resumed ",
-            "rows; run llm_parse_structured_col() on the result if you need ",
-            "them refreshed.", call. = FALSE)
+            "rows; remove their old columns and run llm_parse_structured_col() ",
+            "with the original extraction specification to refresh them.",
+            call. = FALSE)
   }
   if (all(c("tags_ok", "tags_data") %in% names(results))) {
     warning("Tag columns (tags_ok/tags_data and extracted tags) are not ",
-            "re-parsed for resumed rows; run llm_parse_tags_col() on the ",
-            "result to refresh them.", call. = FALSE)
+            "re-parsed for resumed rows; remove old extracted columns and run ",
+            "llm_parse_tags_col() with the original extraction specification ",
+            "to refresh them.", call. = FALSE)
   }
 
   if (!inherits(results, "llmr_experiment")) {
@@ -1269,7 +1305,9 @@ llm_par_resume <- function(results, tries = 3, ...) {
 #' @param .target Bare column name containing the output to evaluate.
 #' @param .config The judge [llm_config].
 #' @param prompt Evaluation prompt template. Use `{.target}` to reference the
-#'   target column value (other data columns are also available).
+#'   target column value (other data columns are also available). A prompt
+#'   that references neither `{.target}` nor the target column draws a warning,
+#'   since the judge would not see the text it evaluates.
 #' @param .tags Tags to extract from the judge response. Defaults to
 #'   `c("reasoning", "score")`.
 #' @param .output Name of the column that receives the judge's raw response.
@@ -1302,6 +1340,19 @@ llm_judge <- function(.data, .target, .config, prompt,
          "uses internally for the prompt template. Rename that column first.")
   }
   stopifnot(is.character(.output), length(.output) == 1L, nzchar(.output))
+
+  # The target reaches the judge only through a placeholder in the prompt; a
+  # prompt without one has the judge rate text it never sees.
+  if (is.character(prompt)) {
+    squeezed <- gsub("\\{\\s*([^{}]*?)\\s*\\}", "{\\1}", prompt, perl = TRUE)
+    refers <- grepl("{.target}", squeezed, fixed = TRUE) |
+      grepl(paste0("{", target_name, "}"), squeezed, fixed = TRUE)
+    if (!any(refers)) {
+      warning(sprintf(paste0(
+        "The judge prompt contains neither `{.target}` nor `{%s}`, so the judge ",
+        "does not see the text it is asked to evaluate."), target_name), call. = FALSE)
+    }
+  }
 
   eval_data <- .data
   eval_data[[".target"]] <- eval_data[[target_name]]

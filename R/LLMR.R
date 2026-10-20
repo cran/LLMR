@@ -171,6 +171,54 @@
 .drop_null <- function(x) purrr::compact(x)
 
 
+#' Log and raise the typed error for an HTTP failure
+#'
+#' Shared by perform_request() and the streaming transport, so both classify
+#' and report a failed request identically. `err` is the parsed error body (or
+#' a try-error) and `raw_err` its text (or `NA`). `call` defaults to the
+#' caller's frame, so the error header names the function the user called.
+#'
+#' @keywords internal
+#' @noRd
+.llmr_http_failure <- function(code, err, raw_err, resp, req, provider, model,
+                               start_time, call = rlang::caller_env()) {
+  raw_tail <- if (!is.na(raw_err) && nzchar(raw_err)) substr(raw_err, 1L, 2000L) else NULL
+  fields <- .llmr_error_fields(err, raw_tail)
+  err_reason <- fields$reason
+  bad_param  <- fields$param
+  category   <- .llmr_classify_error(provider, code, fields$code, err_reason)
+  msg_lines <- c(
+    "LLM API request failed.",
+    paste0("HTTP status: ", code),
+    paste0("Reason: ", err_reason),
+    if (!is.na(bad_param)) paste0("Provider flagged parameter: ", bad_param)
+    else if (category == "billing")
+      "The account is blocked by billing or a spend limit, not by this request."
+    else if (category == "param")
+      "Tip: check model params for provider/API version."
+  )
+  .llmr_log_event(
+    kind = "error", provider = provider, model = model, status = code,
+    request = req, error_message = err_reason,
+    duration_s = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+  )
+  .llmr_error(
+    message     = paste(msg_lines, collapse = "\n"),
+    category    = category,
+    status_code = code,
+    provider    = provider %||% NA_character_,
+    model       = model %||% NA_character_,
+    param       = bad_param,
+    code        = fields$code,
+    request_id  = httr2::resp_header(resp, "x-request-id") %||%
+      httr2::resp_header(resp, "request-id"),
+    retry_after = suppressWarnings(as.numeric(httr2::resp_header(resp, "retry-after") %||% NA_real_)),
+    response_body = if (!inherits(err, "try-error")) err
+                    else if (!is.null(raw_tail)) list(raw = raw_tail) else NULL,
+    call = call
+  )
+}
+
 #' Perform API Request
 #'
 #' Internal helper function to perform the API request and process the response.
@@ -188,14 +236,9 @@ perform_request <- function(req, verbose, provider = NULL, model = NULL, config 
 
   # A stuck connection should fail, not hang the session. Every request carries
   # a total timeout in seconds: per-config `timeout = ...` wins, then
-  # options(llmr.timeout = ...), then 600.
-  tmo <- suppressWarnings(as.numeric(
-    (if (!is.null(config)) config$model_params$timeout else NULL) %||%
-      getOption("llmr.timeout", 600)
-  ))
-  if (length(tmo) == 1L && is.finite(tmo) && tmo > 0) {
-    req <- httr2::req_timeout(req, tmo)
-  }
+  # options(llmr.timeout = ...), then 600. Inf means no limit.
+  tmo <- .llmr_request_timeout(config)
+  if (is.finite(tmo)) req <- httr2::req_timeout(req, tmo)
 
   req <- httr2::req_error(req, is_error = \(resp) FALSE)
   resp <- httr2::req_perform(req)
@@ -210,43 +253,7 @@ perform_request <- function(req, verbose, provider = NULL, model = NULL, config 
     err <- try(httr2::resp_body_json(resp, check_type = FALSE), silent = TRUE)
     raw_err <- try(httr2::resp_body_string(resp), silent = TRUE)
     raw_err <- if (inherits(raw_err, "try-error")) NA_character_ else trimws(raw_err)
-    category <- if (code >= 500) "server" else if (code == 429) "rate_limit"
-    else if (code %in% c(401L, 403L)) "auth"
-    else if (code == 408) "server"            # request timeout: transient, retried like a 5xx
-    else if (code == 400) "param" else "unknown"
-    bad_param <- if (!inherits(err, "try-error")) err$error$param %||% err$param %||% NA_character_ else NA_character_
-    raw_tail <- if (!is.na(raw_err) && nzchar(raw_err)) substr(raw_err, 1L, 2000L) else NULL
-    err_reason <- if (!inherits(err, "try-error")) {
-      err$error$message %||% err$message %||% err$error$type %||% err$error$code %||%
-        raw_tail %||% "No message supplied"
-    } else {
-      raw_tail %||% "No message supplied"
-    }
-    msg_lines <- c(
-      "LLM API request failed.",
-      paste0("HTTP status: ", code),
-      paste0("Reason: ", err_reason),
-      "Tip: check model params for provider/API version."
-    )
-    .llmr_log_event(
-      kind = "error", provider = provider, model = model, status = code,
-      request = req, error_message = err_reason,
-      duration_s = as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-    )
-    .llmr_error(
-      message     = paste(msg_lines, collapse = "\n"),
-      category    = category,
-      status_code = code,
-      provider    = provider %||% NA_character_,
-      model       = model %||% NA_character_,
-      param       = bad_param,
-      code        = if (!inherits(err, "try-error")) err$error$code %||% err$code %||% NA_character_ else NA_character_,
-      request_id  = httr2::resp_header(resp, "x-request-id") %||%
-        httr2::resp_header(resp, "request-id"),
-      retry_after = suppressWarnings(as.numeric(httr2::resp_header(resp, "retry-after") %||% NA_real_)),
-      body        = if (!inherits(err, "try-error")) err
-                    else if (!is.null(raw_tail)) list(raw = raw_tail) else NULL
-    )
+    .llmr_http_failure(code, err, raw_err, resp, req, provider, model, start_time)
   }
 
   raw_response <- httr2::resp_body_raw(resp)
@@ -279,16 +286,22 @@ perform_request <- function(req, verbose, provider = NULL, model = NULL, config 
   tc  <- .token_counts(content)
   rt  <- .reasoning_tokens_from(content)
 
-  # Support Responses API fallback for total tokens
-  direct_total <- if (!is.null(content$usage) && !is.null(content$usage$total_tokens)) content$usage$total_tokens else NULL
+  # A provider-reported total wins: OpenAI-style `usage$total_tokens`, or
+  # Gemini's `usageMetadata$totalTokenCount`, which, unlike its
+  # candidatesTokenCount, includes thinking tokens.
+  direct_total <- if (!is.null(content$usage) && !is.null(content$usage$total_tokens)) {
+    content$usage$total_tokens
+  } else if (!is.null(content$usageMetadata) && !is.null(content$usageMetadata$totalTokenCount)) {
+    content$usageMetadata$totalTokenCount
+  } else NULL
 
   sent_i <- as.integer(tc$sent %||% NA_integer_)
   rec_i  <- as.integer(tc$rec  %||% NA_integer_)
-  # total: prefer a provider-reported total; otherwise sum sent+rec, but only if
-  # at least one part is known (NA + NA stays NA = "unknown", not a false 0).
+  # total: prefer a provider-reported total; otherwise sum sent+rec when both
+  # are known. One known part is not a total, so it stays NA ("unknown").
   total_i <- if (!is.null(direct_total)) as.integer(direct_total)
-             else if (is.na(sent_i) && is.na(rec_i)) NA_integer_
-             else as.integer(sum(c(sent_i, rec_i), na.rm = TRUE))
+             else if (is.na(sent_i) || is.na(rec_i)) NA_integer_
+             else sent_i + rec_i
   usage <- list(sent = sent_i, rec = rec_i, total = total_i,
                 reasoning = as.integer(rt %||% NA_integer_),
                 cached = as.integer(.cached_tokens_from(content) %||% NA_integer_))
@@ -465,6 +478,27 @@ get_endpoint <- function(config, default_endpoint) {
   default_endpoint
 }
 
+# The request timeout in seconds from the config, the llmr.timeout option, or
+# the 600-second default. Checked here as well as in llm_config(), because a
+# saved config or the option can hold a value llm_config() never saw; an
+# invalid value used to leave the request with no timeout at all.
+.llmr_request_timeout <- function(config = NULL) {
+  from_config <- if (!is.null(config)) config$model_params$timeout else NULL
+  if (!is.null(from_config)) return(.llmr_check_timeout(from_config, "timeout"))
+  .llmr_check_timeout(getOption("llmr.timeout", 600), "options(llmr.timeout)")
+}
+
+.llmr_check_timeout <- function(x, what = "timeout") {
+  ok <- is.numeric(x) && length(x) == 1L && !is.na(x) && x > 0
+  if (!ok) {
+    shown <- tryCatch(paste(utils::capture.output(dput(x)), collapse = " "),
+                      error = function(e) class(x)[1])
+    stop(sprintf(paste0("`%s` must be one positive number of seconds (Inf for ",
+                        "no limit), not %s."), what, shown), call. = FALSE)
+  }
+  as.numeric(x)
+}
+
 # ----- Exported Functions -----
 
 #' Create an LLM configuration (provider-agnostic)
@@ -479,14 +513,19 @@ get_endpoint <- function(config, default_endpoint) {
 #'   OpenAI-compatible mode; serves the Qwen models), `"zhipu"`, `"moonshot"`,
 #'   `"openrouter"` (an aggregator routing one OpenAI-compatible interface to
 #'   many hosted models; model ids like `"openai/gpt-4o-mini"`),
+#'   `"meta"` (the Meta Model API, serving the Muse models such as
+#'   `"muse-spark-1.3"`), `"llamacpp"` (a model on this computer, installed
+#'   with [llm_local_install()]; see [llm_local_models()]),
 #'   `"voyage"` (embeddings only), and `"ollama"` (local server, usually
 #'   keyless). Other names are accepted and routed through the
 #'   OpenAI-compatible path.
 #'
 #'   When `api_key` is omitted, LLMR reads the key from the environment using a
 #'   formulaic default: it tries `<PROVIDER>_API_KEY` and then `<PROVIDER>_KEY`,
-#'   upper-cased (e.g. `OPENAI_API_KEY`, or `ALIBABA_API_KEY`/`ALIBABA_KEY`). The
-#'   one exception is Gemini with `vertex = TRUE`, which reads `VERTEX_ACCESS_TOKEN`.
+#'   upper-cased (e.g. `OPENAI_API_KEY`, or `ALIBABA_API_KEY`/`ALIBABA_KEY`).
+#'   Gemini with `vertex = TRUE` reads `VERTEX_ACCESS_TOKEN` instead, and Meta
+#'   also falls back to `MODEL_API_KEY`, the name used in Meta's own
+#'   documentation.
 #' @param model Character scalar. Model name understood by the chosen provider.
 #'   (e.g., `"gpt-4.1-nano"`, `"gpt-5-nano"`, `"gemini-2.5-flash-lite"`,
 #'   `"openai/gpt-oss-20b"`, etc.)
@@ -537,7 +576,8 @@ get_endpoint <- function(config, default_endpoint) {
 #'           thinking is on. Returned reasoning lands in the response's
 #'           `thinking` field.
 #'     \item `timeout` -- total request timeout in seconds (default 600; also
-#'           settable globally via `options(llmr.timeout = ...)`).
+#'           settable globally via `options(llmr.timeout = ...)`). It must be
+#'           one positive number; `Inf` removes the limit.
 #'     \item `cache` -- set `cache = TRUE` to mark the system prompt and tools
 #'           as cacheable for Anthropic (prompt caching). OpenAI, Gemini,
 #'           DeepSeek, and several compatible providers cache long prompt
@@ -629,6 +669,8 @@ llm_config <- function(provider, model, api_key = NULL,
                        no_change = FALSE,
                        ...) {
   model_params <- list(...)
+  if (!is.null(model_params$timeout)) .llmr_check_timeout(model_params$timeout)
+  if (identical(provider, "meta")) .meta_contributor_notice(model)
   ## clamp temperature to valid range
   if (!is.null(model_params$temperature)) {
     temp <- model_params$temperature
@@ -764,6 +806,12 @@ format.llm_config <- function(x, ...) {
 .is_embedding_config <- function(config) {
   if (identical(tolower(config$provider %||% ""), "voyage")) return(TRUE)
   if (!is.null(config$embedding)) return(isTRUE(config$embedding))
+  # A local model's kind comes from its registry entry: names such as "bge-m3"
+  # do not say "embedding".
+  if (identical(config$provider, "llamacpp")) {
+    kind <- .llmr_local_kind(config$model)
+    if (!is.na(kind)) return(identical(kind, "embedding"))
+  }
   grepl("embedding", config$model %||% "", ignore.case = TRUE)
 }
 
@@ -823,10 +871,43 @@ format.llm_config <- function(x, ...) {
 #'         hosted models; its optional attribution headers (`HTTP-Referer`,
 #'         `X-Title`) can be added through the `req_builder` hook of
 #'         [llm_config()]. No embeddings or batch API.
-#'   \item \strong{Error handling:} HTTP errors raise structured conditions with
-#'         classes like `llmr_api_param_error`, `llmr_api_rate_limit_error`,
-#'         `llmr_api_server_error`; see the condition fields for status, code,
-#'         request id, and (where supplied) the offending parameter.
+#'   \item \strong{Local models (llama.cpp):} `provider = "llamacpp"` runs a
+#'         model installed with [llm_local_install()] on this computer; the
+#'         server starts on first use and needs no API key. Chat, streaming,
+#'         structured output, tools, logprobs, and embeddings work as for
+#'         hosted providers, and [llm_next_token()], [llm_continue()], and
+#'         [llm_score()] give token-level access. For embedding models,
+#'         For chat models, `thinking = FALSE` turns off the reasoning step
+#'         of models such as Qwen3 through their chat template. For embedding
+#'         models,
+#'         `task =` selects the model's task prefix and `dimensions =`
+#'         truncates to a trained size. With `api_url`, a llama.cpp server the
+#'         user runs is used instead, with the key in `LLAMACPP_API_KEY` when
+#'         it needs one.
+#'   \item \strong{Meta (Muse):} `provider = "meta"` calls the Meta Model API
+#'         (`api.meta.ai`) with the key in `META_API_KEY` or `MODEL_API_KEY`.
+#'         Muse Spark always reasons: `reasoning_effort` accepts `"minimal"`
+#'         through `"xhigh"` (`"none"` is refused), `stop` and `logprobs` are
+#'         refused, and the reasoning text lands in the `thinking` field.
+#'         Contributor mode trades your content for a lower price: Meta may
+#'         train future models on the prompts and replies, so do not send
+#'         personal, confidential, or IRB-protected data through it. Select it
+#'         by naming the Contributor model, as in
+#'         `llm_config("meta", "muse-spark-1.3-contributor")`. Contributor models
+#'         carry a lower rate limit than Standard ones (150 requests per
+#'         minute per team at the time of writing), which matters for
+#'         [call_llm_par()]; Muse Wonder has no Contributor variant. No
+#'         embeddings or batch API.
+#'   \item \strong{Error handling:} HTTP errors raise structured conditions
+#'         classed by cause: `llmr_api_param_error`, `llmr_api_auth_error`,
+#'         `llmr_api_billing_error`, `llmr_api_rate_limit_error`,
+#'         `llmr_api_server_error`, `llmr_api_unknown_error`. Classification
+#'         uses each provider's documented error codes, so the same signal is
+#'         read per provider (OpenAI's `insufficient_quota` is an empty
+#'         balance; DashScope's is throttling). Billing blocks are never
+#'         retried. The condition fields carry status, code, request id, the
+#'         parsed body (`response_body`), and, where supplied, the offending
+#'         parameter.
 #' }
 #'
 #' @section Message normalization:
@@ -1441,8 +1522,8 @@ call_llm.gemini <- function(config, messages, verbose = FALSE) {
 }
 
 # ---- Shared OpenAI-compatible chat handler ---------------------------------
-# groq/together/deepseek/xiaomi/alibaba/zhipu/moonshot/xai/ollama all speak the
-# OpenAI chat-completions dialect. One builder keeps their feature set
+# groq/together/deepseek/xiaomi/alibaba/zhipu/moonshot/xai/openrouter/meta/ollama
+# all speak the OpenAI chat-completions dialect. One builder keeps their feature set
 # identical: multimodal file parts, the full canonical parameter set,
 # structured output, tools, verbatim extras passthrough, and the
 # modifiability hooks. Per-provider differences reduce to an endpoint, an
@@ -1653,6 +1734,32 @@ call_llm.xai <- function(config, messages, verbose = FALSE) {
     endpoint = get_endpoint(config, default_endpoint = "https://api.x.ai/v1/chat/completions"),
     drop_params = c("top_k", "repetition_penalty")
   )
+}
+
+#' @export
+call_llm.meta <- function(config, messages, verbose = FALSE) {
+  if (.is_embedding_config(config)) {
+    stop("Embedding models are not currently supported for Meta!")
+  }
+  .openai_compat_chat(
+    config, messages, verbose,
+    endpoint = get_endpoint(config, default_endpoint = "https://api.meta.ai/v1/chat/completions"),
+    drop_params = c("top_k", "repetition_penalty")
+  )
+}
+
+# Meta serves Contributor mode as separate model ids ending in "-contributor".
+# Configuring one draws a once-per-session notice about training use.
+.meta_contributor_notice <- function(model) {
+  if (!is.character(model) || length(model) != 1L || is.na(model)) return(invisible(NULL))
+  if (endsWith(model, "-contributor") && !isTRUE(getOption("llmr.quiet"))) {
+    rlang::inform(
+      c(sprintf("Meta Contributor mode: \"%s\".", model),
+        "i" = "Meta may use the prompts and replies to train its models.",
+        "i" = "Do not send personal or confidential data in this mode."),
+      .frequency = "once", .frequency_id = "llmr_meta_contributor")
+  }
+  invisible(NULL)
 }
 
 #' @export
@@ -1872,6 +1979,12 @@ call_llm.gemini_embedding <- function(config, messages,
 parse_embeddings <- function(embedding_response) {
   if (is.null(embedding_response$data) || length(embedding_response$data) == 0)
     return(matrix(nrow = 0, ncol = 0))
+  # Return rows in input order when the response carries indices.
+  idx <- vapply(embedding_response$data, function(d)
+    if (is.list(d) && is.numeric(d$index) && length(d$index) == 1L) d$index else NA_real_, 0)
+  if (!anyNA(idx) && !anyDuplicated(idx)) {
+    embedding_response$data <- embedding_response$data[order(idx)]
+  }
 
   list_of_vectors <- purrr::map(embedding_response$data, ~ {
     if (is.list(.x) && !is.null(.x$embedding) && !all(is.na(.x$embedding))) {

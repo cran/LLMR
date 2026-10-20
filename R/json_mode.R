@@ -34,7 +34,7 @@
 #'
 #' Turn on structured output for a model configuration. Supports OpenAI-compatible
 #' providers (OpenAI, Groq, Together, x.ai, DeepSeek, Xiaomi, Alibaba (Qwen), Zhipu,
-#' Moonshot, OpenRouter), Anthropic, and Gemini.
+#' Moonshot, OpenRouter, Meta), Anthropic, and Gemini.
 #'
 #' @param config An [llm_config] object.
 #' @param schema A named list representing a JSON Schema.
@@ -50,7 +50,7 @@
 #' @return Modified `llm_config`.
 #'
 #' @section Server-side enforcement by provider:
-#' OpenAI, Groq, Together, x.ai, OpenRouter, and Ollama accept a strict
+#' OpenAI, Groq, Together, x.ai, OpenRouter, Meta, and Ollama accept a strict
 #' `json_schema` response format. DeepSeek, Alibaba (Qwen), Zhipu, Moonshot,
 #' and Xiaomi accept only JSON-object mode; for them the supplied schema drives
 #' local parsing and validation, so the prompt itself should describe the
@@ -80,13 +80,13 @@ enable_structured_output <- function(config,
 
   mp <- config$model_params %||% list()
   prov <- config$provider
-  is_openai_compat <- prov %in% c("openai","groq","together","xai","deepseek", "xiaomi", "alibaba", "zhipu", "moonshot", "openrouter", "ollama")
+  is_openai_compat <- prov %in% c("openai","groq","together","xai","deepseek", "xiaomi", "alibaba", "zhipu", "moonshot", "openrouter", "meta", "llamacpp", "ollama")
   # Providers whose API enforces a json_schema response_format server-side.
   # The others (DeepSeek, Alibaba, Zhipu, Moonshot, Xiaomi) reject the
   # json_schema type outright; for them LLMR requests JSON-object mode and the
   # schema is used for local parsing/validation, so describe the desired
   # fields in your prompt.
-  schema_capable <- prov %in% c("openai", "groq", "together", "xai", "openrouter", "ollama")
+  schema_capable <- prov %in% c("openai", "groq", "together", "xai", "openrouter", "meta", "llamacpp", "ollama")
 
   if (is_openai_compat) {
     # Prefer json_mode via response_format for structured output
@@ -840,6 +840,15 @@ llm_mutate_structured <- function(.data,
 #'
 #' Enables structured output on each config (if not already set), runs, then parses JSON.
 #'
+#' Character messages may refer to metadata columns of `experiments` (any
+#' column other than `config` and `messages`) as `{column}`. Each such
+#' placeholder is replaced by that row's value, inserted as text. Nothing inside
+#' braces is evaluated, and braces that do not name a column, such as example
+#' JSON or LaTeX, are sent as written. Doubled braces such as `{{column}}` are
+#' also sent as written, so template text from Jinja, Mustache, or Handlebars
+#' reaches the model unchanged. A placeholder that looks like a name but
+#' matches no column is sent as written, with a warning.
+#'
 #' @param experiments Tibble with `config` and `messages` list-columns.
 #' @param schema Optional JSON Schema list.
 #' @param .fields Optional fields to hoist from parsed JSON (supports nested paths).
@@ -875,23 +884,9 @@ call_llm_par_structured <- function(experiments, schema = NULL, .fields = NULL, 
     }
   }
 
-  # Row-wise glue: character messages are templated against the experiment's
-  # metadata columns ({colname} interpolation). Structured-output prompts
-  # often contain literal braces (example JSON); any string glue cannot parse
-  # is passed through verbatim instead of aborting the whole run.
-  ex$messages <- lapply(seq_len(nrow(ex)), function(i) {
-    msg   <- ex$messages[[i]]
-    rowdf <- ex[i, setdiff(names(ex), c("config", "messages")), drop = FALSE]
-    if (is.character(msg)) {
-      nm  <- names(msg)
-      out <- vapply(msg, function(s) {
-        tryCatch(as.character(glue::glue_data(rowdf, s, .na = "")),
-                 error = function(e) s)
-      }, character(1), USE.NAMES = FALSE)
-      if (!is.null(nm)) names(out) <- nm
-      out
-    } else msg
-  })
+  # {column} placeholders are filled from the metadata columns; braces from the
+  # data (example JSON, LaTeX, code) are sent as written and never evaluated.
+  ex$messages <- .llmr_fill_experiment_messages(ex)
 
   res <- call_llm_par(ex, ...)
   fields_auto <- if (is.null(.fields) && !is.null(effective_schema)) .auto_fields_from_schema(effective_schema) else .fields

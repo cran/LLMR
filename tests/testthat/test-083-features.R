@@ -115,7 +115,8 @@ test_that("llm_usage reports cached tokens and a price estimate", {
   u <- llm_usage(res)
   expect_equal(u$cached_tokens, 80L)
 
-  prices <- data.frame(model = "m1", input = 1, output = 2, cached = 0.1)
+  prices <- data.frame(model = "m1", provider = "openai", input = 1, output = 2,
+                       cached = 0.1)
   u2 <- llm_usage(res, price_table = prices)
   # fresh input: (100-80) + 100 = 120; cached: 80; output: 100
   expect_equal(u2$cost_estimate, (120 * 1 + 80 * 0.1 + 100 * 2) / 1e6)
@@ -380,12 +381,14 @@ test_that("chat content strings render multimodal parts readably", {
 test_that("stream finish reasons reuse the standard vocabulary", {
   expect_identical(LLMR:::.map_stream_finish("stop"), "stop")
   expect_identical(LLMR:::.map_stream_finish("length"), "length")
+  # NULL reaches this helper only after the provider signalled completion;
+  # streams that end without that signal fail (test-stream-failures.R).
   expect_identical(LLMR:::.map_stream_finish(NULL), "stop")
 })
 
 test_that("stream specs cover every compat provider", {
   for (p in c("openai", "groq", "together", "deepseek", "xiaomi", "alibaba",
-              "zhipu", "moonshot", "xai", "openrouter", "ollama")) {
+              "zhipu", "moonshot", "xai", "openrouter", "meta", "ollama")) {
     spec <- LLMR:::.compat_stream_spec(p)
     expect_true(nzchar(spec$endpoint))
     expect_true(spec$auth %in% c("bearer", "api-key", "none"))

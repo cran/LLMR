@@ -38,7 +38,7 @@
     param     = "bad_param",
     duration  = "duration",
     batch     = "rowpack_id",
-    batch_n   = "batch_size",
+    batch_n   = "rows_per_prompt",
     batch_i   = "rowpack_row"
   )
 
@@ -148,17 +148,30 @@
 #'   per **million** tokens), and optionally `cached` (price per million cached
 #'   prompt tokens). When given, a `cost_estimate` column is added: cached
 #'   tokens are billed at the `cached` rate (or the `input` rate if no `cached`
-#'   column), the remaining sent tokens at `input`, and received tokens at
-#'   `output`. LLMR ships no price list on purpose; prices change, and a stale
-#'   bundled table would mislead silently.
+#'   column), the remaining sent tokens at `input`, and everything beyond the
+#'   prompt (`total_tokens - sent_tokens` when both are known, which includes
+#'   Gemini's thinking tokens; otherwise the received tokens) at `output`. For
+#'   Anthropic rows, whose sent count already excludes cache reads, all sent
+#'   tokens are billed at `input`. The provider of a row is read from `x`'s
+#'   `provider` column, which [call_llm_par()] results carry, or else from an
+#'   optional `provider` column of `price_table`; results of [llm_mutate()],
+#'   [llm_fn()], and [llm_batch_fetch()] need the latter for Anthropic models,
+#'   and rows with cached tokens and no known provider draw a warning. Rates
+#'   must be numeric, finite, and
+#'   nonnegative, and each model may appear once; a missing `cached` rate is
+#'   allowed only for models whose rows have no cached tokens. Cache-write
+#'   charges are not included. LLMR ships no price list, because prices change
+#'   and a bundled table would go out of date without notice.
 #'
 #' @return A one-row tibble: `n`, `n_ok`, `n_failed`, `ok_rate`, `n_truncated`
 #'   (finish `"length"`), `n_filtered` (finish `"filter"`), `sent_tokens`,
 #'   `rec_tokens`, `total_tokens`, `reasoning_tokens`, `cached_tokens`
 #'   (prompt tokens served from the provider's cache, when reported),
 #'   `n_unknown_tokens`
-#'   (successful rows for which the provider reported no token usage, so the
-#'   token sums above understate the truth), `duration_s`, (when a batch id
+#'   (rows whose sent, received, or total count was not reported, so the token
+#'   sums above understate the truth by those rows; failed calls count here
+#'   when their usage is missing, although providers usually do not bill
+#'   them, and skipped rows and batch follow-on rows do not), `duration_s`, (when a batch id
 #'   column is present) `rowpack_calls` and `rows_per_rowpack`, and (when
 #'   `price_table` is supplied) `cost_estimate` in the table's currency.
 #'
@@ -198,12 +211,17 @@ llm_usage <- function(x, prefix = NULL, price_table = NULL) {
   uniq_batches <- if (has_batch) length(unique(stats::na.omit(batch))) else NA_integer_
   batch_i <- .llm_get_col(x, m[["batch_i"]], NA_integer_)
 
-  # Rows with genuinely unknown usage: succeeded but no total-token count, and
-  # not a batch follow-on position (where NA tokens are by design, attributed to
-  # the batch's first row). This disambiguates "0 tokens" from "tokens unknown",
-  # since the token sums below use na.rm = TRUE (correct for batching).
+  # A total is known when the provider reported one or both parts are known.
+  # A row's usage is unknown when any of sent, received, or total is missing,
+  # whether the call succeeded or failed, so the sums below (na.rm = TRUE)
+  # understate by those rows. Batch follow-on positions (NA by design, the
+  # usage sits on the batch's first row) and skipped rows (no call was made)
+  # are not unknown.
   batch_follow_on <- !is.na(batch_i) & batch_i > 1L
-  n_unknown_tokens <- sum((ok %in% TRUE) & is.na(total) & !batch_follow_on)
+  skipped <- finish %in% "skipped"
+  total <- ifelse(is.na(total) & !is.na(sent) & !is.na(rec), sent + rec, total)
+  n_unknown_tokens <- sum((is.na(sent) | is.na(rec) | is.na(total)) &
+                            !batch_follow_on & !skipped)
 
   out <- tibble::tibble(
     n                = n,
@@ -231,7 +249,8 @@ llm_usage <- function(x, prefix = NULL, price_table = NULL) {
 # Internal: cost estimate from a user-supplied price table (per million tokens).
 # Cached prompt tokens are billed at the `cached` rate when supplied, otherwise
 # at the input rate (i.e., caching is ignored). Rows whose model has no price
-# are excluded with a warning.
+# are excluded with a warning. Rates are validated rather than dropped: a
+# missing or invalid rate would otherwise shrink the estimate silently.
 .llm_cost_estimate <- function(x, m, price_table) {
   if (!is.data.frame(price_table) ||
       !all(c("model", "input", "output") %in% names(price_table))) {
@@ -239,8 +258,21 @@ llm_usage <- function(x, prefix = NULL, price_table = NULL) {
          "`output` (and optionally `cached`), in currency per million tokens.",
          call. = FALSE)
   }
+  rate_cols <- intersect(c("input", "output", "cached"), names(price_table))
+  for (col in rate_cols) {
+    if (!is.numeric(price_table[[col]])) {
+      stop(sprintf("`price_table$%s` must be numeric (a factor would be read as its codes).", col),
+           call. = FALSE)
+    }
+  }
+  dup <- unique(as.character(price_table$model[duplicated(price_table$model)]))
+  if (length(dup)) {
+    stop("`price_table` lists model(s) more than once: ", paste(dup, collapse = ", "),
+         ".", call. = FALSE)
+  }
   sent   <- .llm_get_col(x, m[["sent"]],   NA_integer_)
   rec    <- .llm_get_col(x, m[["rec"]],    NA_integer_)
+  total  <- .llm_get_col(x, m[["total"]],  NA_integer_)
   cached <- .llm_get_col(x, m[["cached"]], NA_integer_)
 
   if ("model" %in% names(x)) {
@@ -265,20 +297,63 @@ llm_usage <- function(x, prefix = NULL, price_table = NULL) {
   cached0 <- ifelse(is.na(cached), 0, as.numeric(cached))
   sent0   <- ifelse(is.na(sent),   0, as.numeric(sent))
   rec0    <- ifelse(is.na(rec),    0, as.numeric(rec))
-  fresh   <- pmax(sent0 - cached0, 0)
 
-  cost <- fresh * p_in + cached0 * p_cache + rec0 * p_out
+  priced <- !is.na(idx)
+  bad_rate <- function(v) is.na(v) | !is.finite(v) | v < 0
+  bad <- priced & (bad_rate(p_in) | bad_rate(p_out) |
+                   (cached0 > 0 & bad_rate(p_cache)) |
+                   (!is.na(p_cache) & bad_rate(p_cache)))
+  if (any(bad)) {
+    stop("`price_table` has a missing, negative, or non-finite rate for model(s): ",
+         paste(unique(model[bad]), collapse = ", "),
+         ". A missing `cached` rate is allowed only for rows without cached tokens.",
+         call. = FALSE)
+  }
+  p_cache <- ifelse(is.na(p_cache), 0, p_cache)  # only rows with no cached tokens remain NA
+
+  # Cached tokens are part of the prompt count for most providers, so the
+  # fresh prompt is sent minus cached. Anthropic reports `input_tokens` without
+  # cache reads, so there the whole prompt count is fresh. The provider comes
+  # from the rows (call_llm_par() results) or, for results that carry none
+  # (llm_mutate(), llm_fn(), llm_batch_fetch()), from the price table.
+  provider <- if ("provider" %in% names(x)) tolower(as.character(x$provider)) else
+    rep(NA_character_, nrow(x))
+  if ("provider" %in% names(price_table)) {
+    from_table <- tolower(as.character(price_table$provider[idx]))
+    provider <- ifelse(is.na(provider), from_table, provider)
+  }
+  unknown_rule <- priced & cached0 > 0 & is.na(provider)
+  if (any(unknown_rule)) {
+    warning(sprintf(paste0(
+      "%d row(s) with cached tokens have no provider, so their cost assumes the ",
+      "sent count includes the cached tokens, as most providers' counts do. ",
+      "Anthropic's count excludes them; add a `provider` column to ",
+      "`price_table` to price such rows by their provider's rule."),
+      sum(unknown_rule)), call. = FALSE)
+  }
+  fresh <- ifelse(provider %in% "anthropic", sent0, pmax(sent0 - cached0, 0))
+  # Billed output is everything beyond the prompt: total minus sent when both
+  # are known. That equals the received tokens for providers whose total is
+  # their sum, and includes Gemini's thinking tokens, which its received count
+  # (candidatesTokenCount) leaves out.
+  out0 <- ifelse(!is.na(total) & !is.na(sent),
+                 pmax(as.numeric(total) - as.numeric(sent), rec0), rec0)
+
+  cost <- fresh * p_in + cached0 * p_cache + out0 * p_out
   sum(cost, na.rm = TRUE) / 1e6
 }
 
 #' List the rows of an LLM run that failed or were truncated
 #'
-#' Returns one row per problem: a hard failure (`success` not `TRUE`) or a
-#' truncated / content-filtered completion (`finish_reason` `"length"` or
-#' `"filter"`), with the diagnostic detail needed to act. Works on both
-#' [call_llm_par()] and [llm_mutate()] results. For a [call_llm_par()] result
-#' (which still carries `config` and `messages`), pass the original frame to
-#' [llm_par_resume()] to re-run only these rows.
+#' Returns diagnostic rows for calls whose `success` value is not `TRUE`
+#' and, according to `include`, replies whose `finish_reason` is `"length"`
+#' or `"filter"`. Accepts results from [call_llm_par()] and [llm_mutate()].
+#'
+#' Pass the original [call_llm_par()] result to [llm_par_resume()] to repeat
+#' rows whose `success` value is not `TRUE`. Successful truncated or
+#' filtered replies are retained. To repeat those requests, pass their
+#' `config` and `messages` columns to [call_llm_par()]. A token-limit
+#' truncation may require a larger `max_tokens` value in the configuration.
 #'
 #' @inheritParams llm_usage
 #' @param include One of `"failed"` (hard failures only), `"truncated"`
@@ -410,29 +485,4 @@ report.llmr_experiment <- function(x, prefix = NULL, task = NULL, ...) {
     "model identifiers and request ids needed for exact attribution are ",
     "retained when logging is enabled via llm_log_enable()."
   )
-}
-
-
-#' Deprecated methods-paragraph helper
-#'
-#' Deprecated: use [report()] on an `llmr_experiment`. This wrapper keeps the
-#' released 'LLMRagent' 0.8.0 functional and will be removed once its update
-#' is on CRAN.
-#'
-#' @inheritParams llm_usage
-#' @param task Optional clause describing what the model was asked to do.
-#' @return A character scalar from [report()].
-#' @seealso [report()]
-#' @keywords internal
-#' @export
-llm_methods_text <- function(x, prefix = NULL, task = NULL) {
-  rlang::warn(
-    "`llm_methods_text()` is deprecated; use `report()` instead.",
-    .frequency = "once",
-    .frequency_id = "llmr-llm_methods_text"
-  )
-  if (!inherits(x, "llmr_experiment")) {
-    class(x) <- unique(c("llmr_experiment", class(x)))
-  }
-  report(x, prefix = prefix, task = task)
 }

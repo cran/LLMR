@@ -25,6 +25,16 @@ and one column per requested tag or field).
 Injects tag instructions into each experiment row, runs \code{\link[=call_llm_par]{call_llm_par()}},
 then parses XML-like tags from each response via \code{\link[=llm_parse_tags_col]{llm_parse_tags_col()}}.
 }
+\details{
+Character messages may refer to metadata columns of \code{experiments} (any
+column other than \code{config} and \code{messages}) as \code{{column}}. Each such
+placeholder is replaced by that row's value, inserted as text. Nothing inside
+braces is evaluated, and braces that do not name a column, such as example
+JSON or LaTeX, are sent as written. Doubled braces such as \code{{{column}}} are
+also sent as written, so template text from Jinja, Mustache, or Handlebars
+reaches the model unchanged. A placeholder that looks like a name but
+matches no column is sent as written, with a warning.
+}
 \seealso{
 \code{\link[=call_llm_par]{call_llm_par()}}, \code{\link[=llm_parse_tags_col]{llm_parse_tags_col()}}, \code{\link[=llm_fn_tags]{llm_fn_tags()}},
 \code{\link[=llm_mutate_tags]{llm_mutate_tags()}}
